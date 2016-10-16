@@ -25,7 +25,7 @@ class SE3toSE3Cost:
         # as params
         if do_jacobians:
             if do_jacobians[0]:
-                jacobians[0] = -T_1_2_est.inv().adjoint()
+                jacobians[0] = T_1_2_est.inv().adjoint()
 
             if do_jacobians[1]:
                 jacobians[1] = np.identity(6)
