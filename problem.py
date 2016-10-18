@@ -1,8 +1,11 @@
-from liegroups import SE3
+import copy
+import itertools
+
 import numpy as np
 import scipy.sparse as sparse
 import scipy.sparse.linalg as splinalg
-import itertools
+
+from liegroups import SE3
 
 
 class Problem:
@@ -10,18 +13,23 @@ class Problem:
 
     def __init__(self):
         self.residual_blocks = []
-        self.block_params = []
+        self.param_list = []
+        self.block_param_ids = []
 
     def add_residual_block(self, block, params):
         self.residual_blocks.append(block)
-        self.block_params.append(params)
+
+        param_ids = []
+        for p in params:
+            if p not in self.param_list:
+                self.param_list.append(p)
+            param_ids.append(self.param_list.index(p))
+
+        self.block_param_ids.append(param_ids)
 
     def solve(self):
-        all_params = [
-            i for i in itertools.chain.from_iterable(self.block_params)]
-        unique_params = self._get_unique(all_params)
         update_ranges = []
-        for p in unique_params:
+        for p in self.param_list:
             if not update_ranges:
                 update_ranges.append(range(p.dof))
             else:
@@ -43,34 +51,61 @@ class Problem:
             num_iters += 1
             print("iter = %d" % num_iters)
 
-            cost, dx = self.solve_one_iter(unique_params)
-            print("Cost: %f" % cost)
-            print("Update vector:\n", str(dx))
-            print("Norm = %f" % np.linalg.norm(dx))
+            dx = self.solve_one_iter()
+            # print("Update vector:\n", str(dx))
+            print("Update norm = %f" % np.linalg.norm(dx))
 
-            for p, r in zip(unique_params, update_ranges):
+            # Backtrack line search
+            # step_size = 1
+            # best_step_size = step_size
+            # best_cost = np.inf
+            # alpha = 0.5
+            # search_done = False
+            #
+            # while not search_done:
+            #     test_params = copy.deepcopy(self.param_list)
+            #
+            #     for p, r in zip(test_params, update_ranges):
+            #         p.perturb(step_size * dx[r])
+            #
+            #     test_cost = self.eval_cost(test_params)
+            #     print(step_size, " : ", test_cost)
+            #     if test_cost < best_cost:
+            #         best_cost = test_cost
+            #         best_step_size = step_size
+            #     else:
+            #         search_done = True
+            #
+            #     step_size = alpha * step_size
+            #
+            # print("Best step size: %f" % best_step_size)
+            # print("Best cost: %f" % best_cost)
+
+            best_step_size = 0.5  # TODO: WHY?
+
+            # Final update
+            for p, r in zip(self.param_list, update_ranges):
                 print("Before:\n", str(p))
-                # TODO: Figure out where this factor of 2 comes from
-                p.perturb(0.5 * dx[r])
+                p.perturb(best_step_size * dx[r])
                 print("After:\n", str(p))
-            print()
 
-    def solve_one_iter(self, unique_params):
+            cost = self.eval_cost()
+            print("Cost: %f --> %f\n\n" % (prev_cost, cost))
+
+    def solve_one_iter(self):
         b_blocks = [[None] for _ in range(len(self.residual_blocks))]
-        A_blocks = [[None for _ in range(len(unique_params))]
+        A_blocks = [[None for _ in range(len(self.param_list))]
                     for _ in range(len(self.residual_blocks))]
 
-        cost = 0
         block_ridx = 0
-        for block, params in zip(self.residual_blocks, self.block_params):
-
+        for block, pids in zip(self.residual_blocks, self.block_param_ids):
+            params = [self.param_list[pid] for pid in pids]
             residual, jacobians = block.evaluate(params, True)
 
-            for par, jac in zip(params, jacobians):
+            for pid, jac in zip(pids, jacobians):
                 jac_times_weight = jac.T.dot(block.weight)
-                cost += residual.dot(block.weight.dot(residual))
 
-                block_cidx = unique_params.index(par)
+                block_cidx = pid
 
                 # Not sure if CSR or CSC is the best choice here.
                 # spsolve requires one or the other
@@ -90,19 +125,16 @@ class Problem:
         A = sparse.bmat(A_blocks, format='csr')
         b = sparse.bmat(b_blocks, format='csr')
 
-        dx = splinalg.spsolve(A, b)
+        return splinalg.spsolve(A, b)
 
-        return 0.5 * cost, dx
+    def eval_cost(self, param_list=None):
+        if param_list is None:
+            param_list = self.param_list
 
-    def _get_unique(self, seq, idfun=None):
-        if idfun is None:
-            def idfun(x): return x
-        seen = {}
-        result = []
-        for item in seq:
-            marker = idfun(item)
-            if marker in seen:
-                continue
-            seen[marker] = 1
-            result.append(item)
-        return result
+        cost = 0
+        for block, pids in zip(self.residual_blocks, self.block_param_ids):
+            params = [param_list[pid] for pid in pids]
+            residual = block.evaluate(params)
+            cost += residual.dot(block.weight.dot(residual))
+
+        return 0.5 * cost
