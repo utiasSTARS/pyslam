@@ -56,32 +56,30 @@ class Problem:
             print("Update norm = %f" % np.linalg.norm(dx))
 
             # Backtrack line search
-            # step_size = 1
-            # best_step_size = step_size
-            # best_cost = np.inf
-            # alpha = 0.5
-            # search_done = False
-            #
-            # while not search_done:
-            #     test_params = copy.deepcopy(self.param_list)
-            #
-            #     for p, r in zip(test_params, update_ranges):
-            #         p.perturb(step_size * dx[r])
-            #
-            #     test_cost = self.eval_cost(test_params)
-            #     print(step_size, " : ", test_cost)
-            #     if test_cost < best_cost:
-            #         best_cost = test_cost
-            #         best_step_size = step_size
-            #     else:
-            #         search_done = True
-            #
-            #     step_size = alpha * step_size
-            #
-            # print("Best step size: %f" % best_step_size)
-            # print("Best cost: %f" % best_cost)
+            step_size = 1
+            best_step_size = step_size
+            best_cost = np.inf
+            alpha = 0.5
+            search_done = False
 
-            best_step_size = 0.5  # TODO: WHY?
+            while not search_done:
+                test_params = copy.deepcopy(self.param_list)
+
+                for p, r in zip(test_params, update_ranges):
+                    p.perturb(step_size * dx[r])
+
+                test_cost = self.eval_cost(test_params)
+                print(step_size, " : ", test_cost)
+                if test_cost < best_cost:
+                    best_cost = test_cost
+                    best_step_size = step_size
+                else:
+                    search_done = True
+
+                step_size = alpha * step_size
+
+            print("Best step size: %f" % best_step_size)
+            print("Best cost: %f" % best_cost)
 
             # Final update
             for p, r in zip(self.param_list, update_ranges):
@@ -100,10 +98,12 @@ class Problem:
         block_ridx = 0
         for block, pids in zip(self.residual_blocks, self.block_param_ids):
             params = [self.param_list[pid] for pid in pids]
-            residual, jacobians = block.evaluate(params, True)
+            compute_jacobians = [True for _ in pids]
+
+            residual, jacobians = block.evaluate(params, compute_jacobians)
 
             for pid, jac in zip(pids, jacobians):
-                jac_times_weight = jac.T.dot(block.weight)
+                jac_times_weight = jac.dot(block.weight)
 
                 block_cidx = pid
 

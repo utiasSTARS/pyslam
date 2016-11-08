@@ -14,8 +14,8 @@ T_1_0_est = SE3.identity()
 T_2_0_est = T_2_1_obs * T_1_0_obs
 T_3_0_est = T_3_2_obs * T_2_1_obs * T_1_0_obs
 
-T_2_0_est = SE3.exp(0.2 * np.random.rand(6)) * T_2_0_est
-T_3_0_est = SE3.exp(0.2 * np.random.rand(6)) * T_3_0_est
+T_2_0_est = SE3.exp(0.02 * np.random.rand(6)) * T_2_0_est
+T_3_0_est = SE3.exp(0.02 * np.random.rand(6)) * T_3_0_est
 # T_2_0_est = SE3.exp(np.array([0.01, 0.01, 0.01, 0, 0, 0])) * T_2_0_est
 # T_3_0_est = SE3.exp(np.array([0.01, 0.01, 0.01, 0, 0, 0])) * T_3_0_est
 
