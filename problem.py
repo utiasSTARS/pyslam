@@ -13,9 +13,12 @@ class Options:
 
     def __init__(self):
         self.max_iters = 100
-        self.min_update_norm = 1e-2
+        self.min_update_norm = 1e-4
         self.min_cost = 1e-12
-        self.line_search_alpha = 0.5
+
+        self.linesearch_alpha = 0.8
+        self.linesearch_max_iters = 10
+        self.linesearch_min_cost_decrease = 0.9
 
 
 class Problem:
@@ -23,10 +26,18 @@ class Problem:
 
     def __init__(self, options=Options()):
         self.options = options
+        """Optimization options."""
+
+        self.param_list = []
+        """List of all parameters to be optimized."""
 
         self.residual_blocks = []
-        self.param_list = []
+        """List of residual blocks."""
         self.block_param_ids = []
+        """Indices of parameters in self.param_list that each block depends on."""
+
+        self.constant_params = []
+        """List of parameters to be held constant."""
 
     def add_residual_block(self, block, params):
         self.residual_blocks.append(block)
@@ -38,6 +49,16 @@ class Problem:
             param_ids.append(self.param_list.index(p))
 
         self.block_param_ids.append(param_ids)
+
+    def set_parameter_blocks_constant(self, params):
+        for p in params:
+            if p not in self.constant_params:
+                self.constant_params.append(p)
+
+    def set_parameter_blocks_variable(self, params):
+        for p in params:
+            if p in self.constant_params:
+                self.constant_params.remove(p)
 
     def solve(self):
         update_ranges = []
@@ -63,7 +84,7 @@ class Problem:
             print("iter = %d" % num_iters)
 
             dx = self.solve_one_iter()
-            # print("Update vector:\n", str(dx))
+            print("Update vector:\n", str(dx))
             print("Update norm = %f" % np.linalg.norm(dx))
 
             # Backtrack line search
@@ -71,8 +92,10 @@ class Problem:
             best_step_size = step_size
             best_cost = np.inf
             search_done = False
+            ls_iters = 0
 
             while not search_done:
+                ls_iters += 1
                 test_params = copy.deepcopy(self.param_list)
 
                 for p, r in zip(test_params, update_ranges):
@@ -80,13 +103,19 @@ class Problem:
 
                 test_cost = self.eval_cost(test_params)
                 print(step_size, " : ", test_cost)
-                if test_cost < best_cost:
+                if ls_iters < self.options.linesearch_max_iters and \
+                        test_cost < \
+                        self.options.linesearch_min_cost_decrease * best_cost:
                     best_cost = test_cost
                     best_step_size = step_size
                 else:
+                    if test_cost < best_cost:
+                        best_cost = test_cost
+                        best_step_size = step_size
+
                     search_done = True
 
-                step_size = self.options.line_search_alpha * step_size
+                step_size = self.options.linesearch_alpha * step_size
 
             print("Best step size: %f" % best_step_size)
             print("Best cost: %f" % best_cost)
@@ -125,10 +154,10 @@ class Problem:
 
                 if b_blocks[block_ridx][0] is None:
                     b_blocks[block_ridx][0] = sparse.csr_matrix(
-                        jac_times_weight.dot(residual)).T
+                        -jac_times_weight.dot(residual)).T
                 else:
                     b_blocks[block_ridx][0] += sparse.csr_matrix(
-                        jac_times_weight.dot(residual)).T
+                        -jac_times_weight.dot(residual)).T
 
             block_ridx += 1
 
@@ -145,6 +174,7 @@ class Problem:
         for block, pids in zip(self.residual_blocks, self.block_param_ids):
             params = [param_list[pid] for pid in pids]
             residual = block.evaluate(params)
+            # import pdb; pdb.set_trace()
             cost += residual.dot(block.weight.dot(residual))
 
         return 0.5 * cost
