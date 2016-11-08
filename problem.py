@@ -8,10 +8,22 @@ import scipy.sparse.linalg as splinalg
 from liegroups import SE3
 
 
+class Options:
+    """Class for specifying optimization options."""
+
+    def __init__(self):
+        self.max_iters = 100
+        self.min_update_norm = 1e-2
+        self.min_cost = 1e-12
+        self.line_search_alpha = 0.5
+
+
 class Problem:
     """Class for building optimization problems."""
 
-    def __init__(self):
+    def __init__(self, options=Options()):
+        self.options = options
+
         self.residual_blocks = []
         self.param_list = []
         self.block_param_ids = []
@@ -37,15 +49,14 @@ class Problem:
                     update_ranges[-1].stop,
                     update_ranges[-1].stop + p.dof))
 
-        max_iters = 10
-
         num_iters = 0
         dx = np.array([100])
         prev_cost = np.inf
         cost = np.inf
-        while num_iters < max_iters and \
-                np.linalg.norm(dx) > 1e-2 and \
-                cost <= prev_cost:
+        while num_iters < self.options.max_iters and \
+                np.linalg.norm(dx) > self.options.min_update_norm and \
+                cost <= prev_cost and \
+                cost > self.options.min_cost:
             prev_cost = cost
 
             num_iters += 1
@@ -59,7 +70,6 @@ class Problem:
             step_size = 1
             best_step_size = step_size
             best_cost = np.inf
-            alpha = 0.5
             search_done = False
 
             while not search_done:
@@ -76,7 +86,7 @@ class Problem:
                 else:
                     search_done = True
 
-                step_size = alpha * step_size
+                step_size = self.options.line_search_alpha * step_size
 
             print("Best step size: %f" % best_step_size)
             print("Best cost: %f" % best_cost)
@@ -103,7 +113,7 @@ class Problem:
             residual, jacobians = block.evaluate(params, compute_jacobians)
 
             for pid, jac in zip(pids, jacobians):
-                jac_times_weight = jac.dot(block.weight)
+                jac_times_weight = jac.T.dot(block.weight)
 
                 block_cidx = pid
 
