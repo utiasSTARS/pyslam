@@ -20,6 +20,8 @@ class Options:
         self.linesearch_max_iters = 10
         self.linesearch_min_cost_decrease = 0.9
 
+        self.allow_nonmonotonic_steps = False
+
 
 class Problem:
     """Class for building optimization problems."""
@@ -36,7 +38,7 @@ class Problem:
         self.block_param_ids = []
         """Indices of parameters in self.param_list that each block depends on."""
 
-        self.constant_params = []
+        self.constant_param_ids = []
         """List of parameters to be held constant."""
 
     def add_residual_block(self, block, params):
@@ -52,13 +54,15 @@ class Problem:
 
     def set_parameter_blocks_constant(self, params):
         for p in params:
-            if p not in self.constant_params:
-                self.constant_params.append(p)
+            pid = self.param_list.index(p)
+            if pid not in self.constant_param_ids:
+                self.constant_param_ids.append(pid)
 
     def set_parameter_blocks_variable(self, params):
         for p in params:
-            if p in self.constant_params:
-                self.constant_params.remove(p)
+            pid = self.param_list.index(p)
+            if pid not in self.constant_param_ids:
+                self.constant_param_ids.remove(pid)
 
     def solve(self):
         update_ranges = []
@@ -70,18 +74,18 @@ class Problem:
                     update_ranges[-1].stop,
                     update_ranges[-1].stop + p.dof))
 
-        num_iters = 0
+        optimization_iters = 0
         dx = np.array([100])
         prev_cost = np.inf
         cost = np.inf
-        while num_iters < self.options.max_iters and \
-                np.linalg.norm(dx) > self.options.min_update_norm and \
-                cost <= prev_cost and \
-                cost > self.options.min_cost:
+        
+        done_optimization = False
+
+        while not done_optimization:
             prev_cost = cost
 
-            num_iters += 1
-            print("iter = %d" % num_iters)
+            optimization_iters += 1
+            print("iter = %d" % optimization_iters)
 
             dx = self.solve_one_iter()
             print("Update vector:\n", str(dx))
@@ -91,10 +95,11 @@ class Problem:
             step_size = 1
             best_step_size = step_size
             best_cost = np.inf
-            search_done = False
-            ls_iters = 0
 
-            while not search_done:
+            ls_iters = 0
+            done_linesearch = False
+
+            while not done_linesearch:
                 ls_iters += 1
                 test_params = copy.deepcopy(self.param_list)
 
@@ -113,7 +118,7 @@ class Problem:
                         best_cost = test_cost
                         best_step_size = step_size
 
-                    search_done = True
+                    done_linesearch = True
 
                 step_size = self.options.linesearch_alpha * step_size
 
@@ -128,6 +133,14 @@ class Problem:
 
             cost = self.eval_cost()
             print("Cost: %f --> %f\n\n" % (prev_cost, cost))
+
+            # Check if done optimizing
+            done_optimization = optimization_iters > self.options.max_iters or \
+                np.linalg.norm(dx) < self.options.min_update_norm or \
+                cost < self.options.min_cost
+
+            if not self.options.allow_nonmonotonic_steps:
+                done_optimization = done_optimization or cost > prev_cost
 
     def solve_one_iter(self):
         b_blocks = [[None] for _ in range(len(self.residual_blocks))]
