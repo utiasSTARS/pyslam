@@ -5,8 +5,6 @@ import numpy as np
 import scipy.sparse as sparse
 import scipy.sparse.linalg as splinalg
 
-from liegroups import SE3
-
 
 class Options:
     """Class for specifying optimization options."""
@@ -21,6 +19,7 @@ class Options:
         self.linesearch_min_cost_decrease = 0.9
 
         self.allow_nonmonotonic_steps = False
+        self.max_nonmonotonic_steps = 3
 
 
 class Problem:
@@ -78,11 +77,16 @@ class Problem:
         dx = np.array([100])
         prev_cost = np.inf
         cost = np.inf
-        
+        nonmonotonic_steps = 0
+
         done_optimization = False
 
         while not done_optimization:
             prev_cost = cost
+
+            if self.options.allow_nonmonotonic_steps and \
+                    nonmonotonic_steps == 0:
+                    best_params = copy.deepcopy(self.param_list)
 
             optimization_iters += 1
             print("iter = %d" % optimization_iters)
@@ -139,7 +143,16 @@ class Problem:
                 np.linalg.norm(dx) < self.options.min_update_norm or \
                 cost < self.options.min_cost
 
-            if not self.options.allow_nonmonotonic_steps:
+            if self.options.allow_nonmonotonic_steps:
+                if cost > prev_cost:
+                    nonmonotonic_steps += 1
+                else:
+                    nonmonotonic_steps = 0
+
+                if nonmonotonic_steps > self.options.max_nonmonotonic_steps:
+                    done_optimization = True
+                    self.param_list = best_params
+            else:
                 done_optimization = done_optimization or cost > prev_cost
 
     def solve_one_iter(self):

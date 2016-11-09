@@ -45,3 +45,7 @@ problem.add_residual_block(cost2, cost2_params)
 # problem.set_parameter_blocks_variable(cost0_params)
 
 problem.solve()
+
+print("Final:")
+for p in problem.param_list:
+    print(p)
