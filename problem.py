@@ -12,7 +12,7 @@ class Options:
     def __init__(self):
         self.max_iters = 100
         self.min_update_norm = 1e-4
-        self.min_cost = 1e-12
+        self.min_cost = 1e-6
 
         self.linesearch_alpha = 0.8
         self.linesearch_max_iters = 10
@@ -92,8 +92,8 @@ class Problem:
             print("iter = %d" % optimization_iters)
 
             dx = self.solve_one_iter()
-            print("Update vector:\n", str(dx))
-            print("Update norm = %f" % np.linalg.norm(dx))
+            # print("Update vector:\n", str(dx))
+            # print("Update norm = %f" % np.linalg.norm(dx))
 
             # Backtrack line search
             step_size = 1
@@ -111,7 +111,7 @@ class Problem:
                     p.perturb(step_size * dx[r])
 
                 test_cost = self.eval_cost(test_params)
-                print(step_size, " : ", test_cost)
+                # print(step_size, " : ", test_cost)
                 if ls_iters < self.options.linesearch_max_iters and \
                         test_cost < \
                         self.options.linesearch_min_cost_decrease * best_cost:
@@ -126,17 +126,17 @@ class Problem:
 
                 step_size = self.options.linesearch_alpha * step_size
 
-            print("Best step size: %f" % best_step_size)
-            print("Best cost: %f" % best_cost)
+            # print("Best step size: %f" % best_step_size)
+            # print("Best cost: %f" % best_cost)
 
             # Final update
             for p, r in zip(self.param_list, update_ranges):
-                print("Before:\n", str(p))
+                # print("Before:\n", str(p))
                 p.perturb(best_step_size * dx[r])
-                print("After:\n", str(p))
+                # print("After:\n", str(p))
 
             cost = self.eval_cost()
-            print("Cost: %f --> %f\n\n" % (prev_cost, cost))
+            print("Cost: %e --> %e\n" % (prev_cost, cost))
 
             # Check if done optimizing
             done_optimization = optimization_iters > self.options.max_iters or \

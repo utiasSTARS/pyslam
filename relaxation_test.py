@@ -14,12 +14,12 @@ T_1_0_est = SE3.identity()
 T_2_0_est = T_2_1_obs * T_1_0_obs
 T_3_0_est = T_3_2_obs * T_2_1_obs * T_1_0_obs
 
-T_1_0_est = SE3.exp(0.5 * 2 * (np.random.rand(6) - 0.5)) * T_1_0_est
-T_2_0_est = SE3.exp(0.5 * 2 * (np.random.rand(6) - 0.5)) * T_2_0_est
-T_3_0_est = SE3.exp(0.5 * 2 * (np.random.rand(6) - 0.5)) * T_3_0_est
-# T_1_0_est = SE3.exp(np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])) * T_1_0_est
-# T_2_0_est = SE3.exp(np.array([0.1, -0.1, 0.1, -0.1, 0.1, -0.1])) * T_2_0_est
-# T_3_0_est = SE3.exp(np.array([-0.1, 0.1, -0.1, 0.1, -0.1, 0.1])) * T_3_0_est
+# T_1_0_est = SE3.exp(0.05 * 2 * (np.random.rand(6) - 0.5)) * T_1_0_est
+# T_2_0_est = SE3.exp(0.05 * 2 * (np.random.rand(6) - 0.5)) * T_2_0_est
+# T_3_0_est = SE3.exp(0.05 * 2 * (np.random.rand(6) - 0.5)) * T_3_0_est
+T_1_0_est = SE3.exp(np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])) * T_1_0_est
+T_2_0_est = SE3.exp(np.array([0.1, -0.1, 0.1, -0.1, 0.1, -0.1])) * T_2_0_est
+T_3_0_est = SE3.exp(np.array([-0.1, 0.1, -0.1, 0.1, -0.1, 0.1])) * T_3_0_est
 
 # Either we need a prior on the first pose, or it needs to be held constant
 # so that the resulting system of linear equations is solveable
