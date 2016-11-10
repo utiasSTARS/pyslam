@@ -123,9 +123,16 @@ class Problem:
                   (optimization_iters, prev_cost, cost))
 
     def solve_one_iter(self):
-        b_blocks = [[None] for _ in range(len(self.residual_blocks))]
-        A_blocks = [[None for _ in range(len(self.param_list))]
-                    for _ in range(len(self.residual_blocks))]
+        # (H.T * W * H) dx = -H.T * W * e
+        #
+        # Not sure if CSR or CSC is the best choice here.
+        # spsolve requires one or the other
+        # TODO: Check timings for both
+
+        H_blocks = [[None for _ in self.param_list]
+                    for _ in self.residual_blocks]
+        W_diag_blocks = [None for _ in self.residual_blocks]
+        e_blocks = [[None] for _ in self.residual_blocks]
 
         block_ridx = 0
         for block, pids in zip(self.residual_blocks, self.block_param_ids):
@@ -137,27 +144,24 @@ class Problem:
 
             for pid, jac in zip(pids, jacobians):
                 if jac is not None:
-                    jac_times_weight = jac.T.dot(block.weight)
-
                     block_cidx = pid
+                    H_blocks[block_ridx][block_cidx] = sparse.csr_matrix(jac)
 
-                    # Not sure if CSR or CSC is the best choice here.
-                    # spsolve requires one or the other
-                    # TODO: Check timings for both
-                    A_blocks[block_ridx][block_cidx] = sparse.csr_matrix(
-                        jac_times_weight.dot(jac))
-
-                    if b_blocks[block_ridx][0] is None:
-                        b_blocks[block_ridx][0] = sparse.csr_matrix(
-                            -jac_times_weight.dot(residual)).T
-                    else:
-                        b_blocks[block_ridx][0] += sparse.csr_matrix(
-                            -jac_times_weight.dot(residual)).T
+            W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
+            e_blocks[block_ridx][0] = sparse.csr_matrix(residual).T
 
             block_ridx += 1
 
-        A = sparse.bmat(A_blocks, format='csr')
-        b = sparse.bmat(b_blocks, format='csr')
+        H = sparse.bmat(H_blocks, format='csr')
+        W = sparse.block_diag(W_diag_blocks, format='csr')
+        e = sparse.bmat(e_blocks, format='csr')
+
+        # import pdb
+        # pdb.set_trace()
+
+        HW = H.T.dot(W)
+        A = HW.dot(H)
+        b = -HW.dot(e)
 
         return splinalg.spsolve(A, b)
 
@@ -169,7 +173,6 @@ class Problem:
         for block, pids in zip(self.residual_blocks, self.block_param_ids):
             params = [param_list[pid] for pid in pids]
             residual = block.evaluate(params)
-            # import pdb; pdb.set_trace()
             cost += residual.dot(block.weight.dot(residual))
 
         return 0.5 * cost
@@ -217,7 +220,7 @@ class Problem:
 
             test_cost = self.eval_cost(test_params)
 
-            # print(step_size, " : ", test_cost)
+            print(step_size, " : ", test_cost)
 
             if iters < self.options.linesearch_max_iters and \
                     test_cost < \
@@ -233,8 +236,8 @@ class Problem:
 
             step_size = self.options.linesearch_alpha * step_size
 
-        # print("Best step size: %f" % best_step_size)
-        # print("Best cost: %f" % best_cost)
+        print("Best step size: %f" % best_step_size)
+        print("Best cost: %f" % best_cost)
 
         return best_step_size
 

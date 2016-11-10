@@ -19,7 +19,7 @@ class SE3Cost:
             jacobians = [None for _ in range(len(params))]
 
             if compute_jacobians[0]:
-                jacobians[0] = T_est.adjoint()
+                jacobians[0] = np.identity(6)
 
             return residual, jacobians
 
@@ -34,18 +34,16 @@ class SE3toSE3Cost:
         self.weight = weight
 
     def evaluate(self, params, compute_jacobians=None):
-        T_1_0 = params[0]
-        T_2_0 = params[1]
+        T_1_0_est = params[0]
+        T_2_0_est = params[1]
 
-        T_2_1_est = T_2_0 * T_1_0.inv()
-
-        residual = SE3.log(T_2_1_est * self.T_2_1_obs.inv())
+        residual = SE3.log(T_2_0_est * T_1_0_est.inv() * self.T_2_1_obs.inv())
 
         if compute_jacobians:
             jacobians = [None for _ in range(len(params))]
 
             if compute_jacobians[0]:
-                jacobians[0] = T_2_1_est.adjoint()
+                jacobians[0] = -T_2_0_est.adjoint()
 
             if compute_jacobians[1]:
                 jacobians[1] = np.identity(6)
