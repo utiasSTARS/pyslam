@@ -12,8 +12,8 @@ T_3_0_true = SE3(SO3.identity(), -np.array([1, 0, 0]))
 T_4_0_true = SE3(SO3.rotz(np.pi / 2),
                  -(SO3.rotz(np.pi / 2) * np.array([1, 0.5, 0])))
 T_5_0_true = SE3(SO3.rotz(np.pi), -(SO3.rotz(np.pi) * np.array([0.5, 0.5, 0])))
-T_6_0_true = SE3(SO3.rotz(3 * np.pi / 2),
-                 -(SO3.rotz(3 * np.pi / 2) * np.array([0.5, 0, 0])))
+T_6_0_true = SE3(SO3.rotz(-np.pi / 2),
+                 -(SO3.rotz(-np.pi / 2) * np.array([0.5, 0, 0])))
 
 # Odometry
 T_1_0_obs = SE3.identity()
@@ -27,8 +27,8 @@ T_6_5_obs = T_6_0_true * T_5_0_true.inv()
 T_6_2_obs = T_6_0_true * T_2_0_true.inv()
 
 # Random start
-T_1_0_est = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_1_0_true
-T_2_0_est = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_2_0_true
+T_1_0_est = SE3.exp(0. * 2 * (np.random.rand(6) - 0.5)) * T_1_0_true
+T_2_0_est = SE3.exp(0. * 2 * (np.random.rand(6) - 0.5)) * T_2_0_true
 T_3_0_est = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_3_0_true
 T_4_0_est = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_4_0_true
 T_5_0_est = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_5_0_true
@@ -67,32 +67,37 @@ options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
 
 problem = Problem(options)
-problem.add_residual_block(cost0, cost0_params)
+# problem.add_residual_block(cost0, cost0_params)
 problem.add_residual_block(cost1, cost1_params)
 problem.add_residual_block(cost2, cost2_params)
 problem.add_residual_block(cost3, cost3_params)
 problem.add_residual_block(cost4, cost4_params)
 problem.add_residual_block(cost5, cost5_params)
-problem.add_residual_block(cost6, cost6_params)
+# problem.add_residual_block(cost6, cost6_params)
 
-# problem.set_parameters_constant(cost0_params)
-# problem.set_parameters_variable(cost0_params)
+problem.set_parameters_constant(cost0_params)
+# problem.set_parameters_constant(cost1_params)
 
 params = [T_1_0_est, T_2_0_est, T_3_0_est, T_4_0_est, T_5_0_est, T_6_0_est]
 true_params = [T_1_0_true, T_2_0_true, T_3_0_true,
                T_4_0_true, T_5_0_true, T_6_0_true]
 
-print("Initial:")
-for p in params:
-    print(p)
+# print("Initial:")
+# for p in params:
+#     print(p)
+# print()
+
+print("Initial Error:")
+for est, true in zip(params, true_params):
+    print(SE3.log(est.inv() * true))
 print()
 
 problem.solve()
 print()
 
-print("Final:")
-for p in params:
-    print(p)
+# print("Final:")
+# for p in params:
+#     print(p)
 print()
 
 print("Final Error:")

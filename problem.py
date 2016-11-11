@@ -140,30 +140,40 @@ class Problem:
             compute_jacobians = [False if pid in self.constant_param_ids
                                  else True for pid in pids]
 
-            residual, jacobians = block.evaluate(params, compute_jacobians)
+            # Drop the residual if all the parameters used to compute it are
+            # being held constant
+            if any(compute_jacobians):
+                residual, jacobians = block.evaluate(params, compute_jacobians)
 
-            for pid, jac in zip(pids, jacobians):
-                if jac is not None:
-                    block_cidx = pid
-                    H_blocks[block_ridx][block_cidx] = sparse.csr_matrix(jac)
+                for pid, jac in zip(pids, jacobians):
+                    if jac is not None:
+                        block_cidx = pid
+                        H_blocks[block_ridx][block_cidx] = sparse.csr_matrix(jac)
 
-            W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
-            e_blocks[block_ridx][0] = sparse.csr_matrix(residual).T
+
+                W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
+                e_blocks[block_ridx][0] = residual
 
             block_ridx += 1
 
-        H = sparse.bmat(H_blocks, format='csr')
-        W = sparse.block_diag(W_diag_blocks, format='csr')
-        e = sparse.bmat(e_blocks, format='csr')
-
         # import pdb
         # pdb.set_trace()
+
+        # Annoying cleanup
+        W_diag_blocks = [block for block in W_diag_blocks if block is not None]
+        e_blocks = [block for block in e_blocks if block[0] is not None]
+
+        H = sparse.bmat(H_blocks, format='csr')
+        W = sparse.block_diag(W_diag_blocks, format='csr')
+        e = np.bmat(e_blocks).A.T.flatten()
 
         HW = H.T.dot(W)
         A = HW.dot(H)
         b = -HW.dot(e)
 
-        return splinalg.spsolve(A, b)
+        dx = splinalg.spsolve(A, b)
+
+        return dx
 
     def eval_cost(self, param_list=None):
         if param_list is None:
@@ -220,7 +230,7 @@ class Problem:
 
             test_cost = self.eval_cost(test_params)
 
-            print(step_size, " : ", test_cost)
+            # print(step_size, " : ", test_cost)
 
             if iters < self.options.linesearch_max_iters and \
                     test_cost < \
@@ -236,8 +246,8 @@ class Problem:
 
             step_size = self.options.linesearch_alpha * step_size
 
-        print("Best step size: %f" % best_step_size)
-        print("Best cost: %f" % best_cost)
+        # print("Best step size: %f" % best_step_size)
+        # print("Best cost: %f" % best_cost)
 
         return best_step_size
 
