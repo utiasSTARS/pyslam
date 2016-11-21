@@ -124,11 +124,6 @@ class Problem:
 
     def solve_one_iter(self):
         # (H.T * W * H) dx = -H.T * W * e
-        #
-        # Not sure if CSR or CSC is the best choice here.
-        # spsolve requires one or the other
-        # TODO: Check timings for both
-
         H_blocks = [[None for _ in self.param_list]
                     for _ in self.residual_blocks]
         W_diag_blocks = [None for _ in self.residual_blocks]
@@ -148,16 +143,58 @@ class Problem:
                 for pid, jac in zip(pids, jacobians):
                     if jac is not None:
                         block_cidx = pid
-                        H_blocks[block_ridx][block_cidx] = sparse.csr_matrix(jac)
-
+                        H_blocks[block_ridx][
+                            block_cidx] = sparse.csr_matrix(jac)
 
                 W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
                 e_blocks[block_ridx][0] = residual
 
             block_ridx += 1
 
-        # import pdb
-        # pdb.set_trace()
+        # Annoying cleanup
+        W_diag_blocks = [block for block in W_diag_blocks if block is not None]
+        e_blocks = [block for block in e_blocks if block[0] is not None]
+
+        H = sparse.bmat(H_blocks, format='csr')
+        W = sparse.block_diag(W_diag_blocks, format='csr')
+        e = np.bmat(e_blocks).A.T.flatten()
+
+        HW = H.T.dot(W)
+        A = HW.dot(H)
+        b = -HW.dot(e)
+
+        dx = splinalg.spsolve(A, b)
+
+        return dx
+
+    def solve_one_iter2(self):
+        # (H.T * S.T * S * H) dx = -H.T * S.T * e
+        SH_blocks = [[None for _ in self.param_list]
+                    for _ in self.residual_blocks]
+        W_diag_blocks = [None for _ in self.residual_blocks]
+        e_blocks = [[None] for _ in self.residual_blocks]
+
+        block_ridx = 0
+        for block, pids in zip(self.residual_blocks, self.block_param_ids):
+            params = [self.param_list[pid] for pid in pids]
+            compute_jacobians = [False if pid in self.constant_param_ids
+                                 else True for pid in pids]
+
+            # Drop the residual if all the parameters used to compute it are
+            # being held constant
+            if any(compute_jacobians):
+                residual, jacobians = block.evaluate(params, compute_jacobians)
+
+                for pid, jac in zip(pids, jacobians):
+                    if jac is not None:
+                        block_cidx = pid
+                        H_blocks[block_ridx][
+                            block_cidx] = sparse.csr_matrix(jac)
+
+                W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
+                e_blocks[block_ridx][0] = residual
+
+            block_ridx += 1
 
         # Annoying cleanup
         W_diag_blocks = [block for block in W_diag_blocks if block is not None]

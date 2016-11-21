@@ -50,7 +50,8 @@ T_6_0_est = SE2.exp(offset1) * T_6_0_true
 # Either we need a prior on the first pose, or it needs to be held constant
 # so that the resulting system of linear equations is solveable
 prior_weight = np.linalg.inv(1e-12 * np.identity(3))
-odom_weight = np.linalg.inv(1 * np.identity(3))
+odom_weight = np.linalg.inv(1e-3 * np.identity(3))
+loop_weight = np.linalg.inv(1 * np.identity(3))
 
 cost0 = PoseCost(T_1_0_obs, prior_weight)
 cost0_params = [T_1_0_est]
@@ -84,7 +85,7 @@ problem.add_residual_block(cost2, cost2_params)
 problem.add_residual_block(cost3, cost3_params)
 problem.add_residual_block(cost4, cost4_params)
 problem.add_residual_block(cost5, cost5_params)
-# problem.add_residual_block(cost6, cost6_params)
+problem.add_residual_block(cost6, cost6_params)
 
 problem.set_parameters_constant(cost0_params)
 # problem.set_parameters_constant(cost1_params)

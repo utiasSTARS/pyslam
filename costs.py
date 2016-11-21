@@ -54,3 +54,35 @@ class PoseToPoseCost:
             return residual, jacobians
 
         return residual
+
+
+class ReprojectionCost:
+    """Reprojection error for any kind of camera."""
+
+    def __init__(self, camera, obs, weight):
+        self.camera = camera
+        self.obs = obs
+        self.weight = weight
+
+    def evaluate(self, params, compute_jacobians=None):
+        T_cam_w = params[0]
+        pt_w = params[1]
+        pt_cam = T_cam_w * pt_w
+
+        if compute_jacobians:
+            jacobians = [None for _ in range(len(params))]
+
+            if any(compute_jacobians):
+                predicted_obs, cam_jacobian = self.camera.project(pt_cam, True)
+                residual = predicted_obs - self.obs
+
+            if compute_jacobians[0]:
+                jacobians[0] = cam_jacobian.dot(SE3.odot(pt_cam))
+
+            if compute_jacobians[1]:
+                jacobians[1] = cam_jacobian.dot(T_cam_w.rot.as_matrix())
+
+            return residual, jacobians
+
+        residual = self.camera.project(pt_cam) - self.obs
+        return residual
