@@ -1,5 +1,5 @@
 import copy
-import itertools
+# import itertools
 
 import numpy as np
 import scipy.sparse as sparse
@@ -35,7 +35,7 @@ class Problem:
         self.residual_blocks = []
         """List of residual blocks."""
         self.block_param_ids = []
-        """Indices of parameters in self.param_list that each block depends on."""
+        """Indices of parameters in param_list that each block depends on."""
 
         self.constant_param_ids = []
         """List of parameters to be held constant."""
@@ -69,9 +69,8 @@ class Problem:
 
         optimization_iters = 0
         dx = np.array([100])
-        prev_cost = np.inf
-        cost = np.inf
-        nondecreasing_steps = 0
+        cost = self.eval_cost()
+        nondecreasing_steps_taken = 0
 
         done_optimization = False
 
@@ -81,7 +80,7 @@ class Problem:
             prev_cost = cost
 
             if self.options.allow_nondecreasing_steps and \
-                    nondecreasing_steps == 0:
+                    nondecreasing_steps_taken == 0:
                 best_params = copy.deepcopy(self.param_list)
 
             dx = self.solve_one_iter()
@@ -100,17 +99,19 @@ class Problem:
             cost = self.eval_cost()
 
             # Check if done optimizing
-            done_optimization = optimization_iters > self.options.max_iters or \
+            done_optimization = \
+                optimization_iters > self.options.max_iters or \
                 np.linalg.norm(dx) < self.options.min_update_norm or \
                 cost < self.options.min_cost
 
             if self.options.allow_nondecreasing_steps:
                 if cost > prev_cost:
-                    nondecreasing_steps += 1
+                    nondecreasing_steps_taken += 1
                 else:
-                    nondecreasing_steps = 0
+                    nondecreasing_steps_taken = 0
 
-                if nondecreasing_steps > self.options.max_nondecreasing_steps:
+                if nondecreasing_steps_taken \
+                        > self.options.max_nondecreasing_steps:
                     done_optimization = True
                     # Careful with rebinding here
                     for p, bp in zip(self.param_list, best_params):
@@ -125,51 +126,6 @@ class Problem:
     def solve_one_iter(self):
         # (H.T * W * H) dx = -H.T * W * e
         H_blocks = [[None for _ in self.param_list]
-                    for _ in self.residual_blocks]
-        W_diag_blocks = [None for _ in self.residual_blocks]
-        e_blocks = [[None] for _ in self.residual_blocks]
-
-        block_ridx = 0
-        for block, pids in zip(self.residual_blocks, self.block_param_ids):
-            params = [self.param_list[pid] for pid in pids]
-            compute_jacobians = [False if pid in self.constant_param_ids
-                                 else True for pid in pids]
-
-            # Drop the residual if all the parameters used to compute it are
-            # being held constant
-            if any(compute_jacobians):
-                residual, jacobians = block.evaluate(params, compute_jacobians)
-
-                for pid, jac in zip(pids, jacobians):
-                    if jac is not None:
-                        block_cidx = pid
-                        H_blocks[block_ridx][
-                            block_cidx] = sparse.csr_matrix(jac)
-
-                W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
-                e_blocks[block_ridx][0] = residual
-
-            block_ridx += 1
-
-        # Annoying cleanup
-        W_diag_blocks = [block for block in W_diag_blocks if block is not None]
-        e_blocks = [block for block in e_blocks if block[0] is not None]
-
-        H = sparse.bmat(H_blocks, format='csr')
-        W = sparse.block_diag(W_diag_blocks, format='csr')
-        e = np.bmat(e_blocks).A.T.flatten()
-
-        HW = H.T.dot(W)
-        A = HW.dot(H)
-        b = -HW.dot(e)
-
-        dx = splinalg.spsolve(A, b)
-
-        return dx
-
-    def solve_one_iter2(self):
-        # (H.T * S.T * S * H) dx = -H.T * S.T * e
-        SH_blocks = [[None for _ in self.param_list]
                     for _ in self.residual_blocks]
         W_diag_blocks = [None for _ in self.residual_blocks]
         e_blocks = [[None] for _ in self.residual_blocks]

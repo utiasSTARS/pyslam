@@ -1,10 +1,12 @@
 import numpy as np
 
-from liegroups import *
+from liegroups import SE3
+
+from pyslam.utils import bilinear_interpolate
 
 
 class PoseCost:
-    """Unary pose cost given absolute pose measurement in SE(2) or SE(3)."""
+    """Unary pose cost given absolute pose measurement in SE2/SE3."""
 
     def __init__(self, T_obs, weight):
         self.T_obs = T_obs
@@ -28,7 +30,7 @@ class PoseCost:
 
 
 class PoseToPoseCost:
-    """Binary pose-to-pose cost given relative pose mesurement in SE(2) or SE(3)."""
+    """Binary pose-to-pose cost given relative pose mesurement in SE2/SE3."""
 
     def __init__(self, T_2_1_obs, weight):
         self.T_2_1_obs = T_2_1_obs
@@ -73,7 +75,8 @@ class ReprojectionCost:
             jacobians = [None for _ in range(len(params))]
 
             if any(compute_jacobians):
-                predicted_obs, cam_jacobian = self.camera.project(pt_cam, True)
+                predicted_obs, cam_jacobian = self.camera.project(
+                    pt_cam, compute_jacobians=True)
                 residual = predicted_obs - self.obs
 
             if compute_jacobians[0]:
@@ -86,3 +89,31 @@ class ReprojectionCost:
 
         residual = self.camera.project(pt_cam) - self.obs
         return residual
+
+
+class PhotometricCost:
+    """Photometric cost for greyscale images."""
+
+    def __init__(self, camera, im_ref, disp_ref, im_track, jac_ref, weight):
+        self.camera = camera
+        self.im_ref = im_ref
+        self.disp_ref = disp_ref
+        self.im_track = im_track
+        self.jac_ref = jac_ref
+        self.weight = weight
+        self.u, self.v = np.meshgrid(list(range(0, camera.w)),
+                                     list(range(0, camera.h)))
+
+    def evaluate(self, params, compute_jacobians=None):
+        T_track_ref = params[0]
+
+        # Project ref onto track and compute intensity difference
+        residual = np.empty([self.camera.h, self.camera.w])
+        residual.fill(np.nan)
+
+        for u, v in zip(self.u.flatten(), self.v.flatten()):
+            pt_ref = self.camera.triangulate([u, v, self.disp_ref[v, u]])
+            pt_track = T_track_ref * pt_ref
+            uvd_track = self.camera.project(pt_track)
+            residual[v, u] = bilinear_interpolate(
+                self.im_track, uvd_track[0], uvd_track[1]) - self.im_ref[v, u]

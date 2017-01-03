@@ -1,10 +1,11 @@
-import copy
+# import copy
 
 import numpy as np
 
-from costs import *
 from liegroups import SE2, SO2
-from problem import Options, Problem
+
+from pyslam.costs import PoseCost, PoseToPoseCost
+from pyslam.problem import Options, Problem
 
 T_1_0_true = SE2.identity()
 T_2_0_true = SE2(SO2.identity(), -np.array([0.5, 0]))
@@ -39,7 +40,7 @@ T_6_2_obs = T_6_0_true * T_2_0_true.inv()
 # Constant wrong start
 offset1 = np.array([-0.1, 0.1, -0.1])
 offset2 = np.array([0.1, -0.1, 0.1])
-T_1_0_est = T_1_0_true
+T_1_0_est = SE2.exp(offset2) * T_1_0_true
 T_2_0_est = SE2.exp(offset1) * T_2_0_true
 T_3_0_est = SE2.exp(offset2) * T_3_0_true
 T_4_0_est = SE2.exp(offset1) * T_4_0_true
@@ -79,15 +80,15 @@ options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
 
 problem = Problem(options)
-# problem.add_residual_block(cost0, cost0_params)
+problem.add_residual_block(cost0, cost0_params)
 problem.add_residual_block(cost1, cost1_params)
 problem.add_residual_block(cost2, cost2_params)
 problem.add_residual_block(cost3, cost3_params)
 problem.add_residual_block(cost4, cost4_params)
 problem.add_residual_block(cost5, cost5_params)
-problem.add_residual_block(cost6, cost6_params)
+# problem.add_residual_block(cost6, cost6_params)
 
-problem.set_parameters_constant(cost0_params)
+# problem.set_parameters_constant(cost0_params)
 # problem.set_parameters_constant(cost1_params)
 
 params = [T_1_0_est, T_2_0_est, T_3_0_est, T_4_0_est, T_5_0_est, T_6_0_est]
