@@ -14,17 +14,22 @@ class QuadraticCost:
         self.weight = np.array(weight)
 
     def evaluate(self, params, compute_jacobians=None):
-        residual = np.array([params[0][0] * self.x * self.x
-                             + params[0][1] * self.x
-                             + params[0][2]
+        residual = np.array([params[0] * self.x * self.x
+                             + params[1] * self.x
+                             + params[2]
                              - self.y])
 
         if compute_jacobians:
             jacobians = [None for _ in range(len(params))]
 
             if compute_jacobians[0]:
-                jacobians[0] = np.array(
-                    [self.x * self.x, self.x, 1.])
+                jacobians[0] = self.x * self.x
+
+            if compute_jacobians[1]:
+                jacobians[1] = self.x
+
+            if compute_jacobians[2]:
+                jacobians[2] = 1.
 
             return residual, jacobians
 

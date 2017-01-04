@@ -13,22 +13,23 @@ class TestQuadraticCost:
         return QuadraticCost(2., 3., 1.)
 
     def test_evaluate(self, cost):
-        params_good = [np.array([1., -2., 3.])]
-        params_bad = [np.array([0., 3., 1.])]
+        params_good = [1., -2., 3.]
+        params_bad = [0., 3., 1.]
         assert(
             cost.evaluate(params_good) == 0.
             and cost.evaluate(params_bad) != 0.
         )
 
     def test_jacobians(self, cost):
-        params = [np.array([1., -2., 3.])]
+        params = [1., -2., 3.]
         expected_jac = [4., 2., 1.]
-        _, jac1 = cost.evaluate(params, compute_jacobians=[True])
-        _, jac2 = cost.evaluate(params, compute_jacobians=[False])
+        _, jac1 = cost.evaluate(params, compute_jacobians=[True, True, True])
+        _, jac2 = cost.evaluate(params, compute_jacobians=[
+                                False, False, False])
         assert(
-            len(jac1) == len(jac2) == 1
+            len(jac1) == len(jac2) == 3
             and np.allclose(jac1, expected_jac)
-            and not jac2[0]
+            and not any(jac2)
         )
 
 

@@ -37,46 +37,59 @@ class Problem:
         self.options = options
         """Optimization options."""
 
-        self.param_list = []
-        """List of all parameters to be optimized."""
+        self.param_dict = dict()
+        """Dictionary of all parameters with their current values."""
 
         self.residual_blocks = []
         """List of residual blocks."""
-        self.block_param_ids = []
-        """Indices of parameters in param_list that each block depends on."""
+        self.block_param_keys = []
+        """List of parameter keys in param_dict that each block depends on."""
 
-        self.constant_param_ids = []
-        """List of parameters to be held constant."""
+        self.constant_param_keys = []
+        """List of parameter keys in param_dict to be held constant."""
 
-    def add_residual_block(self, block, params):
-        """Add a cost block and its parameters to the problem."""
+    def add_residual_block(self, block, param_keys):
+        """Add a cost block to the problem."""
         self.residual_blocks.append(block)
+        self.block_param_keys.append(param_keys)
 
-        param_ids = []
-        for p in params:
-            if p not in self.param_list:
-                self.param_list.append(p)
-            param_ids.append(self.param_list.index(p))
+    def initialize_params(self, param_dict):
+        """Initialize the parameters in the problem."""
+        # update does a shallow copy, which is no good for immutable parameters
+        self.param_dict.update(copy.deepcopy(param_dict))
 
-        self.block_param_ids.append(param_ids)
-
-    def set_parameters_constant(self, params):
+    def set_parameters_constant(self, param_keys):
         """Hold a list of parameters constant."""
-        for p in params:
-            pid = self.param_list.index(p)
-            if pid not in self.constant_param_ids:
-                self.constant_param_ids.append(pid)
+        for key in param_keys:
+            if key not in self.constant_param_keys:
+                self.constant_param_keys.append(key)
 
-    def set_parameters_variable(self, params):
+    def set_parameters_variable(self, param_keys):
         """Allow a list of parameters to vary."""
-        for p in params:
-            pid = self.param_list.index(p)
-            if pid not in self.constant_param_ids:
-                self.constant_param_ids.remove(pid)
+        for key in param_keys:
+            if key in self.constant_param_keys:
+                self.constant_param_keys.remove(key)
+
+    def eval_cost(self, param_dict=None):
+        """Evaluate the cost function using given parameter values."""
+        if param_dict is None:
+            param_dict = self.param_dict
+
+        cost = 0
+        for block, keys in zip(self.residual_blocks, self.block_param_keys):
+            try:
+                params = [param_dict[key] for key in keys]
+            except KeyError as e:
+                print(
+                    "Parameter {} has not been initialized".format(e.args[0]))
+            residual = block.evaluate(params)
+            cost += np.dot(residual, np.dot(block.weight, residual))
+
+        return 0.5 * cost
 
     def solve(self):
-        """Solve the problem using Gauss-Newton."""
-        variable_params = self._get_params_to_update()
+        """Solve the problem using Gauss - Newton."""
+        variable_param_keys = self._get_params_to_update()
         update_ranges = self._get_update_ranges()
 
         optimization_iters = 0
@@ -93,7 +106,7 @@ class Problem:
 
             if self.options.allow_nondecreasing_steps and \
                     nondecreasing_steps_taken == 0:
-                best_params = copy.deepcopy(self.param_list)
+                best_params = copy.deepcopy(self.param_dict)
 
             dx = self.solve_one_iter()
             # print("Update vector:\n", str(dx))
@@ -103,10 +116,10 @@ class Problem:
             best_step_size = self._do_line_search(dx, update_ranges)
 
             # Final update
-            for p, r in zip(variable_params, update_ranges):
-                # print("Before:\n", str(p))
-                self._perturb(p, best_step_size * dx[r])
-                # print("After:\n", str(p))
+            for k, r in zip(variable_param_keys, update_ranges):
+                # print("Before:\n", str(self.param_dict[k]))
+                self._perturb_by_key(k, best_step_size * dx[r])
+                # print("After:\n", str(self.param_dict[k]))
 
             cost = self.eval_cost()
 
@@ -123,11 +136,9 @@ class Problem:
                     nondecreasing_steps_taken = 0
 
                 if nondecreasing_steps_taken \
-                        > self.options.max_nondecreasing_steps:
+                        >= self.options.max_nondecreasing_steps:
                     done_optimization = True
-                    # Careful with rebinding here
-                    for p, bp in zip(self.param_list, best_params):
-                        self._bind_param(p, bp)
+                    self.param_dict.update(best_params)
             else:
                 done_optimization = done_optimization or cost > prev_cost
 
@@ -135,28 +146,33 @@ class Problem:
             print("iter: %d | Cost: %10e --> %10e" %
                   (optimization_iters, prev_cost, cost))
 
+        return self.param_dict
+
     def solve_one_iter(self):
-        """Solve one iteration of Gauss-Newton."""
+        """Solve one iteration of Gauss - Newton."""
         # (H.T * W * H) dx = -H.T * W * e
-        H_blocks = [[None for _ in self.param_list]
+        H_blocks = [[None for _ in self.param_dict]
                     for _ in self.residual_blocks]
         W_diag_blocks = [None for _ in self.residual_blocks]
         e_blocks = [[None] for _ in self.residual_blocks]
 
+        block_cidx_dict = dict(zip(self.param_dict.keys(),
+                                   list(range(len(self.param_dict)))))
+
         block_ridx = 0
-        for block, pids in zip(self.residual_blocks, self.block_param_ids):
-            params = [self.param_list[pid] for pid in pids]
-            compute_jacobians = [False if pid in self.constant_param_ids
-                                 else True for pid in pids]
+        for block, keys in zip(self.residual_blocks, self.block_param_keys):
+            params = [self.param_dict[key] for key in keys]
+            compute_jacobians = [False if key in self.constant_param_keys
+                                 else True for key in keys]
 
             # Drop the residual if all the parameters used to compute it are
             # being held constant
             if any(compute_jacobians):
                 residual, jacobians = block.evaluate(params, compute_jacobians)
 
-                for pid, jac in zip(pids, jacobians):
+                for key, jac in zip(keys, jacobians):
                     if jac is not None:
-                        block_cidx = pid
+                        block_cidx = block_cidx_dict[key]
                         H_blocks[block_ridx][
                             block_cidx] = sparse.csr_matrix(jac)
 
@@ -181,28 +197,28 @@ class Problem:
 
         return dx
 
-    def eval_cost(self, param_list=None):
-        """Evaluate the cost function using given parameter values."""
-        if param_list is None:
-            param_list = self.param_list
+    def _get_params_to_update(self, param_dict=None):
+        """Helper function to identify parameters to update."""
+        if param_dict is None:
+            param_dict = self.param_dict
 
-        cost = 0
-        for block, pids in zip(self.residual_blocks, self.block_param_ids):
-            params = [param_list[pid] for pid in pids]
-            residual = block.evaluate(params)
-            cost += residual.dot(block.weight.dot(residual))
-
-        return 0.5 * cost
+        return [key for key in self.param_dict.keys()
+                if key not in self.constant_param_keys]
 
     def _get_update_ranges(self):
         """Helper function to partition the full update vector."""
         update_ranges = []
-        for p in self.param_list:
-            if self.param_list.index(p) not in self.constant_param_ids:
-                if hasattr(p, 'dof'):
-                    dof = p.dof
+        for key, param in self.param_dict.items():
+            if key not in self.constant_param_keys:
+                if hasattr(param, 'dof'):
+                    # Check if parameter specifies a tangent space
+                    dof = param.dof
+                elif hasattr(param, '__len__'):
+                    # Check if parameter is a vector
+                    dof = len(param)
                 else:
-                    dof = p.size
+                    # Must be a scalar
+                    dof = 1
 
                 if not update_ranges:
                     update_ranges.append(range(dof))
@@ -212,14 +228,6 @@ class Problem:
                         update_ranges[-1].stop + dof))
 
         return update_ranges
-
-    def _get_params_to_update(self, param_list=None):
-        """Helper function to identify parameters to update."""
-        if param_list is None:
-            param_list = self.param_list
-
-        return [p for p in param_list
-                if param_list.index(p) not in self.constant_param_ids]
 
     def _do_line_search(self, dx, update_ranges):
         """Backtrack line search to optimize step size in a given direction."""
@@ -232,11 +240,11 @@ class Problem:
 
         while not done_linesearch:
             iters += 1
-            test_params = copy.deepcopy(self.param_list)
-            variable_params = self._get_params_to_update(test_params)
+            test_params = copy.deepcopy(self.param_dict)
+            variable_param_keys = self._get_params_to_update(test_params)
 
-            for p, r in zip(variable_params, update_ranges):
-                self._perturb(p, step_size * dx[r])
+            for k, r in zip(variable_param_keys, update_ranges):
+                self._perturb_by_key(k, best_step_size * dx[r], test_params)
 
             test_cost = self.eval_cost(test_params)
 
@@ -261,17 +269,13 @@ class Problem:
 
         return best_step_size
 
-    def _perturb(self, param, dx):
+    def _perturb_by_key(self, key, dx, param_dict=None):
         """Helper function to update a parameter given an update vector."""
-        if hasattr(param, 'perturb'):
-            param.perturb(dx)
+        if not param_dict:
+            param_dict = self.param_dict
+
+        if hasattr(param_dict[key], 'perturb'):
+            param_dict[key].perturb(dx)
         else:
             # Default vector space behaviour
-            param += dx
-
-    def _bind_param(self, dst, src):
-        if hasattr(dst, 'bindto'):
-            dst.bindto(src)
-        else:
-            # Default numpy array behaviour
-            dst.data = src.data
+            param_dict[key] = param_dict[key] + dx
