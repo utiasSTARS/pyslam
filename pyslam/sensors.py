@@ -21,7 +21,7 @@ class StereoCamera:
                         self.fv * pt_c[1] * one_over_z + self.cv,
                         self.fu * self.b * one_over_z])
 
-        if self.is_valid_pixel(uvd):
+        if self.is_valid_measurement(uvd):
             if compute_jacobians:
                 jacobian = np.empty([3, 3])
 
@@ -46,11 +46,11 @@ class StereoCamera:
 
             return uvd
 
-        return np.nan
+        raise ValueError('Got an invalid measurement in StereoCamera.project')
 
     def triangulate(self, uvd, compute_jacobians=None):
         """Triangulate a 3D point in the sensor frame from (u,v,d)."""
-        if self.is_valid_pixel(uvd):
+        if self.is_valid_measurement(uvd):
             b_over_d = self.b / uvd[2]
             fu_over_fv = self.fu / self.fv
 
@@ -82,9 +82,10 @@ class StereoCamera:
 
             return pt_c
 
-        return np.nan
+        raise ValueError(
+            'Got an invalid measurement in StereoCamera.triangulate')
 
-    def is_valid_pixel(self, uvd):
+    def is_valid_measurement(self, uvd):
         return uvd[0] >= 0 and uvd[0] < self.w and \
             uvd[1] >= 0 and uvd[1] < self.h and \
             uvd[2] > 0

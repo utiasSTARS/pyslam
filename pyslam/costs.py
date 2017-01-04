@@ -5,6 +5,32 @@ from liegroups import SE3
 from pyslam.utils import bilinear_interpolate
 
 
+class QuadraticCost:
+    """A simple quadratic cost for fitting a parabola to data."""
+
+    def __init__(self, x, y, weight):
+        self.x = x
+        self.y = y
+        self.weight = np.array(weight)
+
+    def evaluate(self, params, compute_jacobians=None):
+        residual = np.array([params[0][0] * self.x * self.x
+                             + params[0][1] * self.x
+                             + params[0][2]
+                             - self.y])
+
+        if compute_jacobians:
+            jacobians = [None for _ in range(len(params))]
+
+            if compute_jacobians[0]:
+                jacobians[0] = np.array(
+                    [self.x * self.x, self.x, 1.])
+
+            return residual, jacobians
+
+        return residual
+
+
 class PoseCost:
     """Unary pose cost given absolute pose measurement in SE2/SE3."""
 
@@ -74,10 +100,9 @@ class ReprojectionCost:
         if compute_jacobians:
             jacobians = [None for _ in range(len(params))]
 
-            if any(compute_jacobians):
-                predicted_obs, cam_jacobian = self.camera.project(
-                    pt_cam, compute_jacobians=True)
-                residual = predicted_obs - self.obs
+            predicted_obs, cam_jacobian = self.camera.project(
+                pt_cam, compute_jacobians=True)
+            residual = predicted_obs - self.obs
 
             if compute_jacobians[0]:
                 jacobians[0] = cam_jacobian.dot(SE3.odot(pt_cam))

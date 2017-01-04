@@ -11,15 +11,23 @@ class Options:
 
     def __init__(self):
         self.max_iters = 100
+        """Maximum number of iterations before terminating."""
         self.min_update_norm = 1e-6
+        """Minimum update norm before terminating."""
         self.min_cost = 1e-12
+        """Minimum cost value before terminating."""
 
         self.linesearch_alpha = 0.8
+        """Factor by which line search step size decreases each iteration."""
         self.linesearch_max_iters = 10
+        """Maximum number of line search steps."""
         self.linesearch_min_cost_decrease = 0.9
+        """Minimum cost decrease factor to continue the line search."""
 
         self.allow_nondecreasing_steps = False
+        """Enable non-decreasing steps to escape local minima."""
         self.max_nondecreasing_steps = 3
+        """Maximum number of non-dereasing steps before terminating."""
 
 
 class Problem:
@@ -41,6 +49,7 @@ class Problem:
         """List of parameters to be held constant."""
 
     def add_residual_block(self, block, params):
+        """Add a cost block and its parameters to the problem."""
         self.residual_blocks.append(block)
 
         param_ids = []
@@ -52,18 +61,21 @@ class Problem:
         self.block_param_ids.append(param_ids)
 
     def set_parameters_constant(self, params):
+        """Hold a list of parameters constant."""
         for p in params:
             pid = self.param_list.index(p)
             if pid not in self.constant_param_ids:
                 self.constant_param_ids.append(pid)
 
     def set_parameters_variable(self, params):
+        """Allow a list of parameters to vary."""
         for p in params:
             pid = self.param_list.index(p)
             if pid not in self.constant_param_ids:
                 self.constant_param_ids.remove(pid)
 
     def solve(self):
+        """Solve the problem using Gauss-Newton."""
         variable_params = self._get_params_to_update()
         update_ranges = self._get_update_ranges()
 
@@ -115,7 +127,7 @@ class Problem:
                     done_optimization = True
                     # Careful with rebinding here
                     for p, bp in zip(self.param_list, best_params):
-                        p.bindto(bp)
+                        self._bind_param(p, bp)
             else:
                 done_optimization = done_optimization or cost > prev_cost
 
@@ -124,6 +136,7 @@ class Problem:
                   (optimization_iters, prev_cost, cost))
 
     def solve_one_iter(self):
+        """Solve one iteration of Gauss-Newton."""
         # (H.T * W * H) dx = -H.T * W * e
         H_blocks = [[None for _ in self.param_list]
                     for _ in self.residual_blocks]
@@ -169,6 +182,7 @@ class Problem:
         return dx
 
     def eval_cost(self, param_list=None):
+        """Evaluate the cost function using given parameter values."""
         if param_list is None:
             param_list = self.param_list
 
@@ -181,6 +195,7 @@ class Problem:
         return 0.5 * cost
 
     def _get_update_ranges(self):
+        """Helper function to partition the full update vector."""
         update_ranges = []
         for p in self.param_list:
             if self.param_list.index(p) not in self.constant_param_ids:
@@ -199,6 +214,7 @@ class Problem:
         return update_ranges
 
     def _get_params_to_update(self, param_list=None):
+        """Helper function to identify parameters to update."""
         if param_list is None:
             param_list = self.param_list
 
@@ -206,6 +222,7 @@ class Problem:
                 if param_list.index(p) not in self.constant_param_ids]
 
     def _do_line_search(self, dx, update_ranges):
+        """Backtrack line search to optimize step size in a given direction."""
         step_size = 1
         best_step_size = step_size
         best_cost = np.inf
@@ -245,13 +262,14 @@ class Problem:
         return best_step_size
 
     def _perturb(self, param, dx):
+        """Helper function to update a parameter given an update vector."""
         if hasattr(param, 'perturb'):
             param.perturb(dx)
         else:
             # Default vector space behaviour
             param += dx
 
-    def _bindto(self, dst, src):
+    def _bind_param(self, dst, src):
         if hasattr(dst, 'bindto'):
             dst.bindto(src)
         else:
