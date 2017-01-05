@@ -69,7 +69,7 @@ class TestBasic:
                                                         + (2. * 1. * 1.))
         )
 
-    def test_solve_quadratic(self):
+    def test_fit_quadratic(self):
         from pyslam.costs import QuadraticCost
 
         params_true = {'a': 1., 'b': -2., 'c': 3.}
@@ -126,15 +126,16 @@ class TestPoseGraphRelax:
 
     @pytest.fixture
     def odometry(self, poses_true):
-        T_i_j = [[None for _ in poses_true] for _ in poses_true]
-        T_i_j[0][0] = poses_true['T_0_w']
-        T_i_j[1][0] = poses_true['T_1_w'] * poses_true['T_0_w'].inv()
-        T_i_j[2][1] = poses_true['T_2_w'] * poses_true['T_1_w'].inv()
-        T_i_j[3][2] = poses_true['T_3_w'] * poses_true['T_2_w'].inv()
-        T_i_j[4][3] = poses_true['T_4_w'] * poses_true['T_3_w'].inv()
-        T_i_j[5][4] = poses_true['T_5_w'] * poses_true['T_4_w'].inv()
-        T_i_j[5][1] = poses_true['T_5_w'] * poses_true['T_1_w'].inv()
-        return T_i_j
+        T_obs = {
+            'T_0_w': poses_true['T_0_w'],
+            'T_1_0': poses_true['T_1_w'] * poses_true['T_0_w'].inv(),
+            'T_2_1': poses_true['T_2_w'] * poses_true['T_1_w'].inv(),
+            'T_3_2': poses_true['T_3_w'] * poses_true['T_2_w'].inv(),
+            'T_4_3': poses_true['T_4_w'] * poses_true['T_3_w'].inv(),
+            'T_5_4': poses_true['T_5_w'] * poses_true['T_4_w'].inv(),
+            'T_5_1': poses_true['T_5_w'] * poses_true['T_1_w'].inv()
+        }
+        return T_obs
 
     @pytest.fixture
     def costs(self, odometry):
@@ -143,13 +144,13 @@ class TestPoseGraphRelax:
         odom_weight = np.linalg.inv(1e-3 * np.identity(3))
         loop_weight = np.linalg.inv(1. * np.identity(3))
         return [
-            PoseCost(odometry[0][0], prior_weight),
-            PoseToPoseCost(odometry[1][0], odom_weight),
-            PoseToPoseCost(odometry[2][1], odom_weight),
-            PoseToPoseCost(odometry[3][2], odom_weight),
-            PoseToPoseCost(odometry[4][3], odom_weight),
-            PoseToPoseCost(odometry[5][4], odom_weight),
-            PoseToPoseCost(odometry[5][1], loop_weight)
+            PoseCost(odometry['T_0_w'], prior_weight),
+            PoseToPoseCost(odometry['T_1_0'], odom_weight),
+            PoseToPoseCost(odometry['T_2_1'], odom_weight),
+            PoseToPoseCost(odometry['T_3_2'], odom_weight),
+            PoseToPoseCost(odometry['T_4_3'], odom_weight),
+            PoseToPoseCost(odometry['T_5_4'], odom_weight),
+            PoseToPoseCost(odometry['T_5_1'], loop_weight)
         ]
 
     @pytest.fixture
@@ -225,23 +226,23 @@ class TestBundleAdjust:
 
     @pytest.fixture
     def points(self):
-        pts_w_GT = [
+        pts_w_true = [
             np.array([0., -1., 10.]),
             np.array([1., 1., 5.]),
             np.array([-1., 1., 15.])
         ]
-        return pts_w_GT
+        return pts_w_true
 
     @pytest.fixture
     def poses(self):
         from liegroups import SE3
-        T_cam_w_GT = [
+        T_cam_w_true = [
             SE3.identity(),
             SE3.exp(0.1 * np.ones(6)),
             SE3.exp(0.2 * np.ones(6)),
             SE3.exp(0.3 * np.ones(6))
         ]
-        return T_cam_w_GT
+        return T_cam_w_true
 
     @pytest.fixture
     def observations(self, camera, points, poses):
@@ -290,5 +291,4 @@ class TestBundleAdjust:
             else:
                 err = p_est - p_true
 
-            print(err)
             assert(np.linalg.norm(err) < 1e-4)
