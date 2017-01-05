@@ -40,7 +40,7 @@ T_6_2_obs = T_6_0_true * T_2_0_true.inv()
 # Constant wrong start
 offset1 = np.array([-0.1, 0.1, -0.1])
 offset2 = np.array([0.1, -0.1, 0.1])
-T_1_0_init = SE2.exp(offset2) * T_1_0_true
+T_1_0_init = T_1_0_true
 T_2_0_init = SE2.exp(offset1) * T_2_0_true
 T_3_0_init = SE2.exp(offset2) * T_3_0_true
 T_4_0_init = SE2.exp(offset1) * T_4_0_true

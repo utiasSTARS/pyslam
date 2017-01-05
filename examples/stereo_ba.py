@@ -31,7 +31,7 @@ camera = StereoCamera(640, 480, 1000, 1000, 0.25, 1280, 960)
 obs_var = [1, 1, 2]  # [u,v,d]
 obs_covar = np.diagflat(np.array(obs_var))
 
-obs = [[np.random.multivariate_normal(camera.project(T * p), obs_covar)
+obs = [[camera.project(T * p)
         for p in pts_w_GT] for T in T_cam_w_GT]
 
 # Optimize
