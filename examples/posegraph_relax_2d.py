@@ -2,23 +2,24 @@
 
 import numpy as np
 
-from liegroups import SE3, SO3
+from liegroups import SE2, SO2
 
 from pyslam.costs import PoseCost, PoseToPoseCost
 from pyslam.problem import Options, Problem
 
-T_1_0_true = SE3.identity()
-T_2_0_true = SE3(SO3.identity(), -np.array([0.5, 0, 0]))
-T_3_0_true = SE3(SO3.identity(), -np.array([1, 0, 0]))
-T_4_0_true = SE3(SO3.rotz(np.pi / 2),
-                 -(SO3.rotz(np.pi / 2) * np.array([1, 0.5, 0])))
-T_5_0_true = SE3(SO3.rotz(np.pi), -(SO3.rotz(np.pi) * np.array([0.5, 0.5, 0])))
-T_6_0_true = SE3(SO3.rotz(-np.pi / 2),
-                 -(SO3.rotz(-np.pi / 2) * np.array([0.5, 0, 0])))
+T_1_0_true = SE2.identity()
+T_2_0_true = SE2(SO2.identity(), -np.array([0.5, 0]))
+T_3_0_true = SE2(SO2.identity(), -np.array([1, 0]))
+T_4_0_true = SE2(SO2.fromangle(np.pi / 2),
+                 -(SO2.fromangle(np.pi / 2) * np.array([1, 0.5])))
+T_5_0_true = SE2(SO2.fromangle(np.pi), -
+                 (SO2.fromangle(np.pi) * np.array([0.5, 0.5])))
+T_6_0_true = SE2(SO2.fromangle(-np.pi / 2),
+                 -(SO2.fromangle(-np.pi / 2) * np.array([0.5, 0])))
 # T_6_0_true = copy.deepcopy(T_2_0_true)
 
 # Odometry
-T_1_0_obs = SE3.identity()
+T_1_0_obs = SE2.identity()
 T_2_1_obs = T_2_0_true * T_1_0_true.inv()
 T_3_2_obs = T_3_0_true * T_2_0_true.inv()
 T_4_3_obs = T_4_0_true * T_3_0_true.inv()
@@ -29,29 +30,29 @@ T_6_5_obs = T_6_0_true * T_5_0_true.inv()
 T_6_2_obs = T_6_0_true * T_2_0_true.inv()
 
 # Random start
-# T_1_0_init = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_1_0_true
-# T_2_0_init = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_2_0_true
-# T_3_0_init = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_3_0_true
-# T_4_0_init = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_4_0_true
-# T_5_0_init = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_5_0_true
-# T_6_0_init = SE3.exp(0.1 * 2 * (np.random.rand(6) - 0.5)) * T_6_0_true
+# T_1_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_1_0_true
+# T_2_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_2_0_true
+# T_3_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_3_0_true
+# T_4_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_4_0_true
+# T_5_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_5_0_true
+# T_6_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_6_0_true
 
 # Constant wrong start
-offset1 = np.array([-0.1, 0.1, -0.1, 0.1, -0.1, 0.1])
-offset2 = np.array([0.1, -0.1, 0.1, -0.1, 0.1, -0.1])
-T_1_0_init = SE3.exp(offset2) * T_1_0_true
-T_2_0_init = SE3.exp(offset1) * T_2_0_true
-T_3_0_init = SE3.exp(offset2) * T_3_0_true
-T_4_0_init = SE3.exp(offset1) * T_4_0_true
-T_5_0_init = SE3.exp(offset2) * T_5_0_true
-T_6_0_init = SE3.exp(offset1) * T_6_0_true
+offset1 = np.array([-0.1, 0.1, -0.1])
+offset2 = np.array([0.1, -0.1, 0.1])
+T_1_0_init = SE2.exp(offset2) * T_1_0_true
+T_2_0_init = SE2.exp(offset1) * T_2_0_true
+T_3_0_init = SE2.exp(offset2) * T_3_0_true
+T_4_0_init = SE2.exp(offset1) * T_4_0_true
+T_5_0_init = SE2.exp(offset2) * T_5_0_true
+T_6_0_init = SE2.exp(offset1) * T_6_0_true
 
 
 # Either we need a prior on the first pose, or it needs to be held constant
 # so that the resulting system of linear equations is solveable
-prior_weight = np.linalg.inv(1e-12 * np.identity(6))
-odom_weight = np.linalg.inv(1e-3 * np.identity(6))
-loop_weight = np.linalg.inv(1. * np.identity(6))
+prior_weight = np.linalg.inv(1e-12 * np.identity(3))
+odom_weight = np.linalg.inv(1e-3 * np.identity(3))
+loop_weight = np.linalg.inv(1. * np.identity(3))
 
 cost0 = PoseCost(T_1_0_obs, prior_weight)
 cost0_params = ['T_1_0']
@@ -107,11 +108,13 @@ print()
 print("Final Cost: %e\n" % problem.eval_cost())
 
 print("Initial Error:")
-for p_init, p_true in zip(params_init.values(), params_true.values()):
-    print(SE3.log(p_init.inv() * p_true))
+for key in params_true.keys():
+    print('{}: {}'.format(key, SE2.log(
+        params_init[key].inv() * params_true[key])))
 
 print()
 
 print("Final Error:")
-for p_final, p_true in zip(params_final.values(), params_true.values()):
-    print(SE3.log(p_final.inv() * p_true))
+for key in params_true.keys():
+    print('{}: {}'.format(key, SE2.log(
+        params_final[key].inv() * params_true[key])))

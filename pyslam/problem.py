@@ -60,12 +60,22 @@ class Problem:
 
     def set_parameters_constant(self, param_keys):
         """Hold a list of parameters constant."""
+        # param_keys must be a list, but don't force the user to create a
+        # 1-element list
+        if isinstance(param_keys, str):
+            param_keys = [param_keys]
+
         for key in param_keys:
             if key not in self.constant_param_keys:
                 self.constant_param_keys.append(key)
 
     def set_parameters_variable(self, param_keys):
         """Allow a list of parameters to vary."""
+        # param_keys must be a list, but don't force the user to create a
+        # 1-element list
+        if isinstance(param_keys, str):
+            param_keys = [param_keys]
+
         for key in param_keys:
             if key in self.constant_param_keys:
                 self.constant_param_keys.remove(key)
@@ -82,6 +92,7 @@ class Problem:
             except KeyError as e:
                 print(
                     "Parameter {} has not been initialized".format(e.args[0]))
+
             residual = block.evaluate(params)
             cost += np.dot(residual, np.dot(block.weight, residual))
 

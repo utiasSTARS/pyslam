@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyslam.problem import Options, Problem
+from pyslam.problem import Problem
 
 
 def test_residual_blocks():
@@ -35,19 +35,19 @@ def test_constant_params():
     assert(
         problem.constant_param_keys == ['a']
     )
-    problem.set_parameters_constant(['a', 'b'])
+    problem.set_parameters_constant(['a', 'b_param'])
     assert(
-        problem.constant_param_keys == ['a', 'b']
+        problem.constant_param_keys == ['a', 'b_param']
     )
     problem.set_parameters_variable('a')
     assert(
-        problem.constant_param_keys == ['b']
+        problem.constant_param_keys == ['b_param']
     )
     problem.set_parameters_variable('c')
     assert(
-        problem.constant_param_keys == ['b']
+        problem.constant_param_keys == ['b_param']
     )
-    problem.set_parameters_variable(['a', 'b', 'c'])
+    problem.set_parameters_variable(['a', 'b_param', 'c'])
     assert(
         problem.constant_param_keys == []
     )

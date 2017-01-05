@@ -5,13 +5,13 @@ class StereoCamera:
     """Pinhole stereo camera model with the origin in left camera."""
 
     def __init__(self, cu, cv, fu, fv, b, w, h):
-        self.cu = cu
-        self.cv = cv
-        self.fu = fu
-        self.fv = fv
-        self.b = b
-        self.w = w
-        self.h = h
+        self.cu = float(cu)
+        self.cv = float(cv)
+        self.fu = float(fu)
+        self.fv = float(fv)
+        self.b = float(b)
+        self.w = int(w)
+        self.h = int(h)
 
     def project(self, pt_c, compute_jacobians=None):
         """Project a 3D point in the sensor frame into (u,v,d) coordinates."""
@@ -46,7 +46,9 @@ class StereoCamera:
 
             return uvd
 
-        raise ValueError('Got an invalid measurement in StereoCamera.project')
+        raise ValueError('Got an invalid measurement in StereoCamera.project\n'
+                         + 'pt_c: {}\n'.format(pt_c)
+                         + 'uvd:  {}\n'.format(uvd))
 
     def triangulate(self, uvd, compute_jacobians=None):
         """Triangulate a 3D point in the sensor frame from (u,v,d)."""
@@ -83,7 +85,9 @@ class StereoCamera:
             return pt_c
 
         raise ValueError(
-            'Got an invalid measurement in StereoCamera.triangulate')
+            'Got an invalid measurement in StereoCamera.triangulate\n'
+            + 'uvd:  {}\n'.format(uvd)
+            + 'pt_c: {}\n'.format(pt_c))
 
     def is_valid_measurement(self, uvd):
         return uvd[0] >= 0 and uvd[0] < self.w and \
