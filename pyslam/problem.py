@@ -141,7 +141,7 @@ class Problem:
                 cost < self.options.min_cost
 
             if self.options.allow_nondecreasing_steps:
-                if cost > prev_cost:
+                if cost >= prev_cost:
                     nondecreasing_steps_taken += 1
                 else:
                     nondecreasing_steps_taken = 0
@@ -151,7 +151,7 @@ class Problem:
                     done_optimization = True
                     self.param_dict.update(best_params)
             else:
-                done_optimization = done_optimization or cost > prev_cost
+                done_optimization = done_optimization or cost >= prev_cost
 
             # Status message
             print("iter: %d | Cost: %10e --> %10e" %
