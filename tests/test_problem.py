@@ -292,3 +292,38 @@ class TestBundleAdjust:
                 err = p_est - p_true
 
             assert(np.linalg.norm(err) < 1e-4)
+
+
+class TestCovariance:
+
+    @pytest.fixture
+    def options(self):
+        options = Options()
+        options.allow_nondecreasing_steps = True
+        options.max_nondecreasing_steps = 3
+        return options
+
+    def test_se3(self, options):
+        from liegroups import SE3
+        from pyslam.costs import PoseCost, PoseToPoseCost
+
+        problem = Problem(options)
+
+        odom = SE3.exp(0.1 * np.ones(6))
+        odom_covar = 1e-3 * np.eye(SE3.dof)
+        T0_covar = 1e-6 * np.eye(SE3.dof)
+
+        cost0 = PoseCost(SE3.identity(), np.linalg.inv(T0_covar))
+        cost1 = PoseToPoseCost(odom, np.linalg.inv(odom_covar))
+
+        params_init = {'T0': SE3.identity(), 'T1': SE3.identity()}
+
+        problem.add_residual_block(cost0, 'T0')
+        problem.add_residual_block(cost1, ['T0', 'T1'])
+        problem.initialize_params(params_init)
+        problem.solve()
+        problem.compute_covariance()
+        estimated_covar = problem.get_covariance_block('T1', 'T1')
+        expected_covar = odom_covar + odom.adjoint().dot(T0_covar.dot(odom.adjoint().T))
+
+        assert(np.allclose(estimated_covar, expected_covar))

@@ -88,8 +88,8 @@ problem.add_residual_block(cost4, cost4_params)
 problem.add_residual_block(cost5, cost5_params)
 problem.add_residual_block(cost6, cost6_params)
 
-# problem.set_parameters_constant(cost0_params)
-# problem.set_parameters_constant(cost1_params)
+# problem.set_parameters_constant('T_1_0')
+# problem.set_parameters_constant('T_3_0')
 
 params_init = {'T_1_0': T_1_0_init, 'T_2_0': T_2_0_init,
                'T_3_0': T_3_0_init, 'T_4_0': T_4_0_init,
