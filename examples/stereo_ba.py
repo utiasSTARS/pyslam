@@ -41,23 +41,24 @@ options.max_nondecreasing_steps = 3
 
 problem = Problem(options)
 
-for i in range(len(obs)):
-    for j in range(len(obs[i])):
-        cost = ReprojectionCost(camera, obs[i][j], np.linalg.inv(obs_covar))
+for i, this_pose_obs in enumerate(obs):
+    for j, o in enumerate(this_pose_obs):
+        cost = ReprojectionCost(camera, o, np.linalg.inv(obs_covar))
         problem.add_residual_block(
             cost, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
 
 params_true = {}
 params_init = {}
 
-for i in range(len(pts_w_GT)):
+for i, pt in enumerate(pts_w_GT):
     pid = 'pt{}_w'.format(i)
-    params_true.update({pid: pts_w_GT[i]})
-    params_init.update({pid: camera.triangulate(obs[0][i])})
+    params_true.update({pid: pt})
+    params_init.update({pid: camera.triangulate(
+        obs[0][i] + 10. * np.random.rand(3))})
 
-for i in range(len(T_cam_w_GT)):
+for i, pose in enumerate(T_cam_w_GT):
     pid = 'T_cam{}_w'.format(i)
-    params_true.update({pid: T_cam_w_GT[i]})
+    params_true.update({pid: pose})
     params_init.update({pid: SE3.identity()})
 
 problem.initialize_params(params_init)

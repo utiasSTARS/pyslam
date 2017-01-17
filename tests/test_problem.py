@@ -257,24 +257,24 @@ class TestBundleAdjust:
         obs_var = [1, 1, 2]  # [u,v,d]
         obs_covar = np.diagflat(np.array(obs_var))
 
-        for i in range(len(observations)):
-            for j in range(len(observations[i])):
-                cost = ReprojectionCost(
-                    camera, observations[i][j], np.linalg.inv(obs_covar))
+        for i, this_pose_obs in enumerate(observations):
+            for j, o in enumerate(this_pose_obs):
+                cost = ReprojectionCost(camera, o, np.linalg.inv(obs_covar))
                 problem.add_residual_block(
                     cost, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
 
         params_true = {}
         params_init = {}
 
-        for i in range(len(points)):
+        for i, pt in enumerate(points):
             pid = 'pt{}_w'.format(i)
-            params_true.update({pid: points[i]})
-            params_init.update({pid: camera.triangulate(observations[0][i])})
+            params_true.update({pid: pt})
+            params_init.update({pid: camera.triangulate(
+                observations[0][i] + 10. * np.random.rand(3))})
 
-        for i in range(len(poses)):
+        for i, pose in enumerate(poses):
             pid = 'T_cam{}_w'.format(i)
-            params_true.update({pid: poses[i]})
+            params_true.update({pid: pose})
             params_init.update({pid: SE3.identity()})
 
         problem.initialize_params(params_init)

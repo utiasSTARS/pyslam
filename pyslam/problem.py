@@ -289,4 +289,4 @@ class Problem:
             param_dict[key].perturb(dx)
         else:
             # Default vector space behaviour
-            param_dict[key] = param_dict[key] + dx
+            param_dict[key] += dx
