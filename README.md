@@ -1,5 +1,5 @@
 # pyslam
-Non-linear least-squares SLAM in Python using scipy and numpy. Similar to Google's Ceres solver.
+Non-linear least-squares SLAM in Python using scipy and numpy. Modelled after Google's Ceres solver.
 
 Dependencies:
 * numpy (for most things)

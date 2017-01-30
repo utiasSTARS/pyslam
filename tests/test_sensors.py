@@ -16,32 +16,6 @@ class TestStereoCamera:
         h = 200
         return StereoCamera(cu, cv, fu, fv, b, w, h)
 
-    def test_measurement_validation(self, sensor):
-        uvd_good = [0., 0., 1.]
-        uvd_bad1 = [-1., 0., 1.]
-        uvd_bad2 = [0., -1., 1.]
-        uvd_bad3 = [201., 0., 1.]
-        uvd_bad4 = [0., 201., 1.]
-        uvd_bad5 = [0., 0., 0.]
-        assert(
-            sensor.is_valid_measurement(uvd_good)
-            and not sensor.is_valid_measurement(uvd_bad1)
-            and not sensor.is_valid_measurement(uvd_bad2)
-            and not sensor.is_valid_measurement(uvd_bad3)
-            and not sensor.is_valid_measurement(uvd_bad4)
-            and not sensor.is_valid_measurement(uvd_bad5)
-        )
-
-    def test_invalid_project(self, sensor):
-        bad_xyz = np.array([0., 0., -1.])
-        with pytest.raises(Exception):
-            sensor.project(bad_xyz)
-
-    def test_invalid_triangulate(self, sensor):
-        bad_uvd = np.array([0., 0., -1.])
-        with pytest.raises(Exception):
-            sensor.triangulate(bad_uvd)
-
     def test_project_triangulate(self, sensor):
         test_xyz = [1., 2., 10.]
         test_uvd = [110., 120., 10.]
@@ -70,3 +44,21 @@ class TestStereoCamera:
         assert(
             np.allclose(jacobian, expected_jacobian)
         )
+
+    def test_multi_triangulate(self, sensor):
+        test_xyz1 = [1., 2., 10.]
+        test_xyz2 = [2., 1., 20.]
+        test_xyz12 = np.array([test_xyz1, test_xyz2])  # 2x3
+        uvd, jacobians = sensor.triangulate(test_xyz12, True)
+        assert(uvd.shape == (3, 2) and jacobians.shape == (3, 3, 2))
+        uvd, jacobians = sensor.triangulate(test_xyz12.T, True)
+        assert(uvd.shape == (3, 2) and jacobians.shape == (3, 3, 2))
+
+    def test_multi_project(self, sensor):
+        test_uvd1 = [110., 120., 10.]
+        test_uvd2 = [500., 600., 1.]
+        test_uvd12 = np.array([test_uvd1, test_uvd2])  # 2x3
+        xyz, jacobians = sensor.triangulate(test_uvd12, True)
+        assert(xyz.shape == (3, 2) and jacobians.shape == (3, 3, 2))
+        xyz, jacobians = sensor.triangulate(test_uvd12.T, True)
+        assert(xyz.shape == (3, 2) and jacobians.shape == (3, 3, 2))
