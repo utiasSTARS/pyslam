@@ -18,9 +18,7 @@ class StereoCamera:
         # Convert to 2D array if it's just a single point.
         # We'll remove any singleton dimensions at the end.
         pt_c = np.array(pt_c)
-
-        if pt_c.ndim == 1:
-            pt_c = np.expand_dims(pt_c, axis=0)
+        pt_c = np.atleast_2d(pt_c)
 
         # Make sure the array is 3xN, not Nx3
         if not pt_c.shape[0] == 3:
@@ -62,9 +60,7 @@ class StereoCamera:
         # Convert to 2D array if it's just a single point
         # We'll remove any singleton dimensions at the end.
         uvd = np.array(uvd)
-
-        if uvd.ndim == 1:
-            uvd = np.expand_dims(uvd, axis=0)
+        uvd = np.atleast_2d(uvd)
 
         # Make sure the array is 3xN, not Nx3
         if not uvd.shape[0] == 3:
