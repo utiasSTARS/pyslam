@@ -16,6 +16,18 @@ class TestStereoCamera:
         h = 200
         return StereoCamera(cu, cv, fu, fv, b, w, h)
 
+    def test_is_valid_measurement(self, sensor):
+        test_uvd = np.array([[110., 120., 10.],
+                             [-10., 100., 10.],
+                             [0., -10., 10.],
+                             [0., 0., -5.]])
+        test_expected = [True, False, False, False]
+        for uvd, expected in zip(test_uvd, test_expected):
+            assert sensor.is_valid_measurement(uvd) == expected
+
+        assert np.array_equal(
+            sensor.is_valid_measurement(test_uvd), test_expected)
+
     def test_project_triangulate(self, sensor):
         test_xyz = [1., 2., 10.]
         test_uvd = [110., 120., 10.]
@@ -40,20 +52,22 @@ class TestStereoCamera:
         xyz, jacobian = sensor.triangulate(test_uvd, compute_jacobians=True)
         assert np.allclose(jacobian, expected_jacobian)
 
-    def test_triangulate_vectorized(self, sensor):
-        test_xyz1 = [1., 2., 10.]
-        test_xyz2 = [2., 1., 20.]
-        test_xyz12 = np.array([test_xyz1, test_xyz2])  # 2x3
-        uvd, jacobians = sensor.triangulate(test_xyz12, True)
-        assert(uvd.shape == (2, 3) and jacobians.shape == (2, 3, 3))
-        uvd, jacobians = sensor.triangulate(test_xyz12, True)
-        assert(uvd.shape == (2, 3) and jacobians.shape == (2, 3, 3))
-
     def test_project_vectorized(self, sensor):
+        test_xyz1 = [1., 2., 10.]
+        test_xyz2 = [2., 1., -20.]
+        test_xyz12 = np.array([test_xyz1, test_xyz2])  # 2x3
+        uvd, jacobians = sensor.project(test_xyz12, True)
+        assert uvd.shape == (2, 3)
+        assert jacobians.shape == (2, 3, 3)
+        assert np.all(np.isnan(uvd[1, :]))
+        assert np.all(np.isnan(jacobians[1, :, :]))
+
+    def test_triangulate_vectorized(self, sensor):
         test_uvd1 = [110., 120., 10.]
         test_uvd2 = [500., 600., 1.]
         test_uvd12 = np.array([test_uvd1, test_uvd2])  # 2x3
         xyz, jacobians = sensor.triangulate(test_uvd12, True)
-        assert(xyz.shape == (2, 3) and jacobians.shape == (2, 3, 3))
-        xyz, jacobians = sensor.triangulate(test_uvd12, True)
-        assert(xyz.shape == (2, 3) and jacobians.shape == (2, 3, 3))
+        assert xyz.shape == (2, 3)
+        assert jacobians.shape == (2, 3, 3)
+        assert np.all(np.isnan(xyz[1, :]))
+        assert np.all(np.isnan(jacobians[1, :, :]))
