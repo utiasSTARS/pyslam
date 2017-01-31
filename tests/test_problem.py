@@ -12,9 +12,7 @@ class TestBasic:
         param_keys = ['a', 'b', 'c']
         problem.add_residual_block(QuadraticCost(2., 4., 1.),
                                    param_keys)
-        assert(
-            param_keys == problem.block_param_keys[0]
-        )
+        assert param_keys == problem.block_param_keys[0]
 
     def test_param_dict(self):
         problem = Problem()
@@ -26,32 +24,20 @@ class TestBasic:
         extra_param = {'d': 4}
         params.update(extra_param)
         problem.initialize_params(extra_param)
-        assert(
-            problem.param_dict == params
-        )
+        assert problem.param_dict == params
 
     def test_constant_params(self):
         problem = Problem()
         problem.set_parameters_constant('a')
-        assert(
-            problem.constant_param_keys == ['a']
-        )
+        assert problem.constant_param_keys == ['a']
         problem.set_parameters_constant(['a', 'b_param'])
-        assert(
-            problem.constant_param_keys == ['a', 'b_param']
-        )
+        assert problem.constant_param_keys == ['a', 'b_param']
         problem.set_parameters_variable('a')
-        assert(
-            problem.constant_param_keys == ['b_param']
-        )
+        assert problem.constant_param_keys == ['b_param']
         problem.set_parameters_variable('c')
-        assert(
-            problem.constant_param_keys == ['b_param']
-        )
+        assert problem.constant_param_keys == ['b_param']
         problem.set_parameters_variable(['a', 'b_param', 'c'])
-        assert(
-            problem.constant_param_keys == []
-        )
+        assert problem.constant_param_keys == []
 
     def test_eval_cost(self):
         from pyslam.costs import QuadraticCost
@@ -63,11 +49,9 @@ class TestBasic:
         problem.add_residual_block(cost1, ['a', 'b', 'c'])
         problem.add_residual_block(cost2, ['a', 'b', 'c'])
         problem.initialize_params(good_params)
-        assert(
-            problem.eval_cost() == 0.
-            and problem.eval_cost(bad_params) == 0.5 * ((0.5 * 3. * 3.)
-                                                        + (2. * 1. * 1.))
-        )
+        assert problem.eval_cost() == 0.
+        assert problem.eval_cost(bad_params) == 0.5 * ((0.5 * 3. * 3.)
+                                                       + (2. * 1. * 1.))
 
     def test_fit_quadratic(self):
         from pyslam.costs import QuadraticCost
@@ -88,7 +72,7 @@ class TestBasic:
         params_final = problem.solve()
 
         for p_final, p_true in zip(params_final.values(), params_true.values()):
-            assert(np.allclose(p_final, p_true))
+            assert np.allclose(p_final, p_true)
 
 
 class TestPoseGraphRelax:
@@ -182,8 +166,8 @@ class TestPoseGraphRelax:
         problem.initialize_params(poses_init)
         poses_final = problem.solve()
         for key in poses_true.keys():
-            assert(np.linalg.norm(
-                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4)
+            assert np.linalg.norm(
+                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
 
     def test_first_pose_prior(self, options, costs, cost_params,
                               poses_init, poses_true):
@@ -194,8 +178,8 @@ class TestPoseGraphRelax:
         problem.initialize_params(poses_init)
         poses_final = problem.solve()
         for key in poses_true.keys():
-            assert(np.linalg.norm(
-                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4)
+            assert np.linalg.norm(
+                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
 
     def test_loop_closure(self, options, costs, cost_params,
                           poses_init, poses_true):
@@ -206,8 +190,8 @@ class TestPoseGraphRelax:
         problem.initialize_params(poses_init)
         poses_final = problem.solve()
         for key in poses_true.keys():
-            assert(np.linalg.norm(
-                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4)
+            assert np.linalg.norm(
+                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
 
 
 class TestBundleAdjust:
@@ -291,7 +275,7 @@ class TestBundleAdjust:
             else:
                 err = p_est - p_true
 
-            assert(np.linalg.norm(err) < 1e-4)
+            assert np.linalg.norm(err) < 1e-4
 
 
 class TestCovariance:
@@ -326,4 +310,4 @@ class TestCovariance:
         estimated_covar = problem.get_covariance_block('T1', 'T1')
         expected_covar = odom_covar + odom.adjoint().dot(T0_covar.dot(odom.adjoint().T))
 
-        assert(np.allclose(estimated_covar, expected_covar))
+        assert np.allclose(estimated_covar, expected_covar)
