@@ -138,14 +138,39 @@ class PhotometricCost:
     def evaluate(self, params, compute_jacobians=None):
         T_track_ref = params[0]
 
-        # Project ref onto track and compute intensity difference
-        pt_ref = self.camera.triangulate(np.array([self.u.flatten(),
-                                                   self.v.flatten(),
-                                                   self.disp_ref.flatten()]).T)
+        uvd_ref = np.array([self.u.flatten(), self.v.flatten(),
+                            self.disp_ref.flatten()]).T
+        im_ref_true = self.im_ref.flatten()
+
+        # Filter out bad measurements (NaN disparity)
+        valid_ref = self.camera.is_valid_measurement(uvd_ref)
+        uvd_ref = uvd_ref[valid_ref, :]
+        im_ref_true = im_ref_true[valid_ref]
+
+        # Reproject reference image pixels into tracking image to predict the
+        # reference image based on the tracking image
+        pt_ref = self.camera.triangulate(np.array(uvd_ref))
         pt_track = T_track_ref * pt_ref
         uvd_track = self.camera.project(pt_track)
+
+        # Filter out bad measurements (out of bounds coordinates, nonpositive
+        # disparity)
+        valid_track = self.camera.is_valid_measurement(uvd_track)
+        uvd_track = uvd_track[valid_track, :]
+        uvd_ref = uvd_ref[valid_track]
+        im_ref_true = im_ref_true[valid_track]
+
+        # The residual is the intensity difference between the estimated
+        # reference image pixels and the true reference image pixels
         im_ref_est = bilinear_interpolate(
             self.im_track, uvd_track[:, 0], uvd_track[:, 1])
-        residual = np.reshape(im_ref_est, self.im_ref.shape) - self.im_ref
+        residual = im_ref_est - im_ref_true
+
+        # DEBUG: Rebuild the residual image as a sanity check
+        # residual_image = np.empty(self.im_ref.shape)
+        # residual_image.fill(np.nan)
+        # residual_image[uvd_ref.astype(int)[:, 1],
+        #                uvd_ref.astype(int)[:, 0]] = residual
+        # return residual_image
 
         return residual
