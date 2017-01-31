@@ -132,18 +132,20 @@ class PhotometricCost:
         self.jac_ref = jac_ref
         self.weight = weight
         self.u, self.v = np.meshgrid(list(range(0, camera.w)),
-                                     list(range(0, camera.h)))
+                                     list(range(0, camera.h)),
+                                     indexing='xy')
 
     def evaluate(self, params, compute_jacobians=None):
         T_track_ref = params[0]
 
         # Project ref onto track and compute intensity difference
-        residual = np.empty([self.camera.h, self.camera.w])
-        residual.fill(np.nan)
+        pt_ref = self.camera.triangulate(np.array([self.u.flatten(),
+                                                   self.v.flatten(),
+                                                   self.disp_ref.flatten()]).T)
+        pt_track = T_track_ref * pt_ref
+        uvd_track = self.camera.project(pt_track)
+        im_ref_est = bilinear_interpolate(
+            self.im_track, uvd_track[:, 0], uvd_track[:, 1])
+        residual = np.reshape(im_ref_est, self.im_ref.shape) - self.im_ref
 
-        for u, v in zip(self.u.flatten(), self.v.flatten()):
-            pt_ref = self.camera.triangulate([u, v, self.disp_ref[v, u]])
-            pt_track = T_track_ref * pt_ref
-            uvd_track = self.camera.project(pt_track)
-            residual[v, u] = bilinear_interpolate(
-                self.im_track, uvd_track[0], uvd_track[1]) - self.im_ref[v, u]
+        return residual

@@ -17,39 +17,37 @@ class StereoCamera:
         """Project 3D point(s) in the sensor frame into (u,v,d) coordinates."""
         # Convert to 2D array if it's just a single point.
         # We'll remove any singleton dimensions at the end.
-        pt_c = np.array(pt_c)
         pt_c = np.atleast_2d(pt_c)
 
-        # Make sure the array is 3xN, not Nx3
-        if not pt_c.shape[0] == 3:
-            pt_c = pt_c.T
+        if not pt_c.shape[1] == 3:
+            raise ValueError("pt_c must have shape (3,) or (N,3)")
 
         # Now do the actual math
-        one_over_z = 1 / pt_c[2, :]
+        one_over_z = 1 / pt_c[:, 2]
 
-        uvd = np.array([self.fu * pt_c[0, :] * one_over_z + self.cu,
-                        self.fv * pt_c[1, :] * one_over_z + self.cv,
-                        self.fu * self.b * one_over_z])
+        uvd = np.array([self.fu * pt_c[:, 0] * one_over_z + self.cu,
+                        self.fv * pt_c[:, 1] * one_over_z + self.cv,
+                        self.fu * self.b * one_over_z]).T
 
         if compute_jacobians:
-            jacobians = np.empty([3, 3, pt_c.shape[1]])
+            jacobians = np.empty([pt_c.shape[0], 3, 3])
 
             one_over_z2 = one_over_z * one_over_z
 
             # d(u) / d(pt_c)
-            jacobians[0, 0, :] = self.fu * one_over_z
-            jacobians[0, 1, :] = 0.
-            jacobians[0, 2, :] = -self.fu * pt_c[0, :] * one_over_z2
+            jacobians[:, 0, 0] = self.fu * one_over_z
+            jacobians[:, 0, 1] = 0.
+            jacobians[:, 0, 2] = -self.fu * pt_c[:, 0] * one_over_z2
 
             # d(v) / d(pt_c)
-            jacobians[1, 0, :] = 0.
-            jacobians[1, 1, :] = self.fv * one_over_z
-            jacobians[1, 2, :] = -self.fv * pt_c[1, :] * one_over_z2
+            jacobians[:, 1, 0] = 0.
+            jacobians[:, 1, 1] = self.fv * one_over_z
+            jacobians[:, 1, 2] = -self.fv * pt_c[:, 1] * one_over_z2
 
             # d(d) / d(pt_c)
-            jacobians[2, 0, :] = 0.
-            jacobians[2, 1, :] = 0.
-            jacobians[2, 2, :] = -self.fu * self.b * one_over_z2
+            jacobians[:, 2, 0] = 0.
+            jacobians[:, 2, 1] = 0.
+            jacobians[:, 2, 2] = -self.fu * self.b * one_over_z2
 
             return np.squeeze(uvd), np.squeeze(jacobians)
 
@@ -59,40 +57,38 @@ class StereoCamera:
         """Triangulate 3D point(s) in the sensor frame from (u,v,d)."""
         # Convert to 2D array if it's just a single point
         # We'll remove any singleton dimensions at the end.
-        uvd = np.array(uvd)
         uvd = np.atleast_2d(uvd)
 
-        # Make sure the array is 3xN, not Nx3
-        if not uvd.shape[0] == 3:
-            uvd = uvd.T
+        if not uvd.shape[1] == 3:
+            raise ValueError("uvd must have shape (3,) or (N,3)")
 
         # Now do the actual math
-        b_over_d = self.b / uvd[2, :]
+        b_over_d = self.b / uvd[:, 2]
         fu_over_fv = self.fu / self.fv
 
-        pt_c = np.array([(uvd[0, :] - self.cu) * b_over_d,
-                         (uvd[1, :] - self.cv) * b_over_d * fu_over_fv,
-                         self.fu * b_over_d])
+        pt_c = np.array([(uvd[:, 0] - self.cu) * b_over_d,
+                         (uvd[:, 1] - self.cv) * b_over_d * fu_over_fv,
+                         self.fu * b_over_d]).T
 
         if compute_jacobians:
-            jacobians = np.empty([3, 3, uvd.shape[1]])
+            jacobians = np.empty([uvd.shape[0], 3, 3])
 
-            b_over_d2 = b_over_d / uvd[2, :]
+            b_over_d2 = b_over_d / uvd[:, 2]
 
             # d(x) / d(uvd)
-            jacobians[0, 0, :] = b_over_d
-            jacobians[0, 1, :] = 0.
-            jacobians[0, 2, :] = (self.cu - uvd[0, :]) * b_over_d2
+            jacobians[:, 0, 0] = b_over_d
+            jacobians[:, 0, 1] = 0.
+            jacobians[:, 0, 2] = (self.cu - uvd[:, 0]) * b_over_d2
 
             # d(y) / d(uvd)
-            jacobians[1, 0, :] = 0.
-            jacobians[1, 1, :] = b_over_d * fu_over_fv
-            jacobians[1, 2, :] = (self.cv - uvd[1, :]) * b_over_d2 * fu_over_fv
+            jacobians[:, 1, 0] = 0.
+            jacobians[:, 1, 1] = b_over_d * fu_over_fv
+            jacobians[:, 1, 2] = (self.cv - uvd[:, 1]) * b_over_d2 * fu_over_fv
 
             # d(z) / d(uvd)
-            jacobians[2, 0, :] = 0.
-            jacobians[2, 1, :] = 0.
-            jacobians[2, 2, :] = -self.fu * b_over_d2
+            jacobians[:, 2, 0] = 0.
+            jacobians[:, 2, 1] = 0.
+            jacobians[:, 2, 2] = -self.fu * b_over_d2
 
             return np.squeeze(pt_c), np.squeeze(jacobians)
 

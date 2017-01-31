@@ -50,15 +50,15 @@ class TestStereoCamera:
         test_xyz2 = [2., 1., 20.]
         test_xyz12 = np.array([test_xyz1, test_xyz2])  # 2x3
         uvd, jacobians = sensor.triangulate(test_xyz12, True)
-        assert(uvd.shape == (3, 2) and jacobians.shape == (3, 3, 2))
-        uvd, jacobians = sensor.triangulate(test_xyz12.T, True)
-        assert(uvd.shape == (3, 2) and jacobians.shape == (3, 3, 2))
+        assert(uvd.shape == (2, 3) and jacobians.shape == (2, 3, 3))
+        uvd, jacobians = sensor.triangulate(test_xyz12, True)
+        assert(uvd.shape == (2, 3) and jacobians.shape == (2, 3, 3))
 
     def test_multi_project(self, sensor):
         test_uvd1 = [110., 120., 10.]
         test_uvd2 = [500., 600., 1.]
         test_uvd12 = np.array([test_uvd1, test_uvd2])  # 2x3
         xyz, jacobians = sensor.triangulate(test_uvd12, True)
-        assert(xyz.shape == (3, 2) and jacobians.shape == (3, 3, 2))
-        xyz, jacobians = sensor.triangulate(test_uvd12.T, True)
-        assert(xyz.shape == (3, 2) and jacobians.shape == (3, 3, 2))
+        assert(xyz.shape == (2, 3) and jacobians.shape == (2, 3, 3))
+        xyz, jacobians = sensor.triangulate(test_uvd12, True)
+        assert(xyz.shape == (2, 3) and jacobians.shape == (2, 3, 3))
