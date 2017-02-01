@@ -1,7 +1,17 @@
 import numpy as np
+import scipy as sp
+
+
+def invsqrt(x):
+    """Convenience function to compute the inverse square root of a scalar or a square matrix."""
+    if hasattr(x, 'shape'):
+        return np.linalg.inv(sp.linalg.sqrtm(x))
+
+    return 1. / np.sqrt(x)
 
 
 def bilinear_interpolate(im, x, y):
+    """Perform bilinear interpolation on a 2D array."""
     x = np.asarray(x)
     y = np.asarray(y)
 

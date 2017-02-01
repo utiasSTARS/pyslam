@@ -5,6 +5,7 @@ from liegroups import SE3
 from pyslam.sensors import StereoCamera
 from pyslam.costs import ReprojectionCost
 from pyslam.problem import Options, Problem
+from pyslam.utils import invsqrt
 
 # Reproducibility
 np.random.seed(42)
@@ -29,7 +30,7 @@ camera = StereoCamera(640, 480, 1000, 1000, 0.25, 1280, 960)
 
 # Observations
 obs_var = [1, 1, 2]  # [u,v,d]
-obs_stiffness = np.diagflat(np.sqrt(obs_var))
+obs_stiffness = invsqrt(np.diagflat(obs_var))
 
 obs = [[camera.project(T * p)
         for p in pts_w_GT] for T in T_cam_w_GT]

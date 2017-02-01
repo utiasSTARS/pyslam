@@ -50,9 +50,9 @@ T_6_0_init = SE2.exp(offset1) * T_6_0_true
 
 # Either we need a prior on the first pose, or it needs to be held constant
 # so that the resulting system of linear equations is solveable
-prior_stiffness = np.linalg.inv(np.sqrt(1e-12) * np.identity(3))
-odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.identity(3))
-loop_stiffness = np.linalg.inv(np.sqrt(1.) * np.identity(3))
+prior_stiffness = invsqrt(1e-12 * np.identity(3))
+odom_stiffness = invsqrt(1e-3 * np.identity(3))
+loop_stiffness = invsqrt(1. * np.identity(3))
 
 cost0 = PoseCost(T_1_0_obs, prior_stiffness)
 cost0_params = ['T_1_0']

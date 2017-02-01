@@ -87,9 +87,10 @@ T_1_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
     np.linalg.inv(dataset.oxts[1].T_w_imu)))
 T_0_w.normalize()
 T_1_w.normalize()
+T_1_0_true = T_1_w * T_0_w.inv()
 
-params_init = {'T_1_0': T_1_w * T_0_w.inv()}
-# params_init = {'T_1_0': SE3.identity()}
+# params_init = {'T_1_0': T_1_0_true}
+params_init = {'T_1_0': SE3.identity()}
 
 # residual, jacobians = cost.evaluate([params_init['T_1_0']], [True])
 # residual = cost.evaluate([params_init['T_1_0']])
@@ -98,6 +99,7 @@ params_init = {'T_1_0': T_1_w * T_0_w.inv()}
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
+options.min_cost_decrease = 1.
 
 problem = Problem(options)
 problem.add_residual_block(cost, ['T_1_0'])

@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from pyslam.problem import Options, Problem
+from pyslam.utils import invsqrt
 
 
 class TestBasic:
@@ -124,9 +125,9 @@ class TestPoseGraphRelax:
     @pytest.fixture
     def costs(self, odometry):
         from pyslam.costs import PoseCost, PoseToPoseCost
-        prior_stiffness = np.linalg.inv(np.sqrt(1e-12) * np.identity(3))
-        odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.identity(3))
-        loop_stiffness = np.linalg.inv(np.sqrt(1.) * np.identity(3))
+        prior_stiffness = invsqrt(1e-12 * np.identity(3))
+        odom_stiffness = invsqrt(1e-3 * np.identity(3))
+        loop_stiffness = invsqrt(1. * np.identity(3))
         return [
             PoseCost(odometry['T_0_w'], prior_stiffness),
             PoseToPoseCost(odometry['T_1_0'], odom_stiffness),
@@ -239,7 +240,7 @@ class TestBundleAdjust:
         problem = Problem(options)
 
         obs_var = [1, 1, 2]  # [u,v,d]
-        obs_stiffness = np.diagflat(np.sqrt(obs_var))
+        obs_stiffness = invsqrt(np.diagflat(obs_var))
 
         for i, this_pose_obs in enumerate(observations):
             for j, o in enumerate(this_pose_obs):
@@ -295,8 +296,8 @@ class TestCovariance:
 
         odom = SE3.exp(0.1 * np.ones(6))
 
-        odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.eye(SE3.dof))
-        T0_stiffness = np.linalg.inv(np.sqrt(1e-6) * np.eye(SE3.dof))
+        odom_stiffness = invsqrt(1e-3 * np.eye(SE3.dof))
+        T0_stiffness = invsqrt(1e-6 * np.eye(SE3.dof))
 
         odom_covar = np.linalg.inv(np.dot(odom_stiffness, odom_stiffness))
         T0_covar = np.linalg.inv(np.dot(T0_stiffness, T0_stiffness))

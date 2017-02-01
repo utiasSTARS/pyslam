@@ -6,6 +6,7 @@ from liegroups import SE3, SO3
 
 from pyslam.costs import PoseCost, PoseToPoseCost
 from pyslam.problem import Options, Problem
+from pyslam.utils import invsqrt
 
 T_1_0_true = SE3.identity()
 T_2_0_true = SE3(SO3.identity(), -np.array([0.5, 0, 0]))
@@ -49,9 +50,9 @@ T_6_0_init = SE3.exp(offset1) * T_6_0_true
 
 # Either we need a prior on the first pose, or it needs to be held constant
 # so that the resulting system of linear equations is solveable
-prior_stiffness = np.linalg.inv(np.sqrt(1e-12) * np.identity(6))
-odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.identity(6))
-loop_stiffness = np.linalg.inv(np.sqrt(1.) * np.identity(6))
+prior_stiffness = invsqrt(1e-12 * np.identity(6))
+odom_stiffness = invsqrt(1e-3 * np.identity(6))
+loop_stiffness = invsqrt(1. * np.identity(6))
 
 cost0 = PoseCost(T_1_0_obs, prior_stiffness)
 cost0_params = ['T_1_0']
