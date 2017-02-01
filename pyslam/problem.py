@@ -16,6 +16,8 @@ class Options:
         """Minimum update norm before terminating."""
         self.min_cost = 1e-12
         """Minimum cost value before terminating."""
+        self.min_cost_decrease = 0.9
+        """Minimum cost decrease factor to continue optimization."""
 
         self.linesearch_alpha = 0.8
         """Factor by which line search step size decreases each iteration."""
@@ -148,7 +150,7 @@ class Problem:
                 cost < self.options.min_cost
 
             if self.options.allow_nondecreasing_steps:
-                if cost >= prev_cost:
+                if cost >= self.options.min_cost_decrease * prev_cost:
                     nondecreasing_steps_taken += 1
                 else:
                     nondecreasing_steps_taken = 0
@@ -158,7 +160,8 @@ class Problem:
                     done_optimization = True
                     self.param_dict.update(best_params)
             else:
-                done_optimization = done_optimization or cost >= prev_cost
+                done_optimization = done_optimization or \
+                    cost >= self.options.min_cost_decrease * prev_cost
 
             # Status message
             print("iter: %d | Cost: %10e --> %10e" %
