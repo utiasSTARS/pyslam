@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.sparse as sparse
 
 from liegroups import SE3
 
@@ -191,15 +190,8 @@ class PhotometricCost:
             jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
-                jac_blocks = [[None] for _ in enumerate(residual)]
-                for i, block in enumerate(jac_blocks):
-                    jac_blocks[i][0] = np.atleast_2d(
-                        im_jac[i, :].dot(
-                            project_jac[i, 0:2, :].dot(
-                                SE3.odot(pt_track[i, :])))
-                    )
-
-                jacobians[0] = self.stiffness * np.bmat(jac_blocks).A
+                jacobians[0] = np.einsum('...i,...ij,...jk->...k',
+                                         im_jac, project_jac[:, 0:2, :], SE3.odot(pt_track))
 
             return residual, jacobians
 
