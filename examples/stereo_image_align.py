@@ -85,6 +85,8 @@ T_0_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
     np.linalg.inv(dataset.oxts[0].T_w_imu)))
 T_1_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
     np.linalg.inv(dataset.oxts[1].T_w_imu)))
+T_0_w.normalize()
+T_1_w.normalize()
 
 params_init = {'T_1_0': T_1_w * T_0_w.inv()}
 # params_init = {'T_1_0': SE3.identity()}

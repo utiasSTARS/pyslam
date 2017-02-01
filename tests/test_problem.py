@@ -50,8 +50,8 @@ class TestBasic:
         problem.add_residual_block(cost2, ['a', 'b', 'c'])
         problem.initialize_params(good_params)
         assert problem.eval_cost() == 0.
-        assert problem.eval_cost(bad_params) == 0.5 * ((0.5 * 3. * 3.)
-                                                       + (2. * 1. * 1.))
+        assert problem.eval_cost(bad_params) == 0.5 * ((0.5 * 0.5 * 3. * 3.)
+                                                       + (2. * 2. * 1. * 1.))
 
     def test_fit_quadratic(self):
         from pyslam.costs import QuadraticCost
@@ -124,17 +124,17 @@ class TestPoseGraphRelax:
     @pytest.fixture
     def costs(self, odometry):
         from pyslam.costs import PoseCost, PoseToPoseCost
-        prior_weight = np.linalg.inv(1e-12 * np.identity(3))
-        odom_weight = np.linalg.inv(1e-3 * np.identity(3))
-        loop_weight = np.linalg.inv(1. * np.identity(3))
+        prior_stiffness = np.linalg.inv(np.sqrt(1e-12) * np.identity(3))
+        odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.identity(3))
+        loop_stiffness = np.linalg.inv(np.sqrt(1.) * np.identity(3))
         return [
-            PoseCost(odometry['T_0_w'], prior_weight),
-            PoseToPoseCost(odometry['T_1_0'], odom_weight),
-            PoseToPoseCost(odometry['T_2_1'], odom_weight),
-            PoseToPoseCost(odometry['T_3_2'], odom_weight),
-            PoseToPoseCost(odometry['T_4_3'], odom_weight),
-            PoseToPoseCost(odometry['T_5_4'], odom_weight),
-            PoseToPoseCost(odometry['T_5_1'], loop_weight)
+            PoseCost(odometry['T_0_w'], prior_stiffness),
+            PoseToPoseCost(odometry['T_1_0'], odom_stiffness),
+            PoseToPoseCost(odometry['T_2_1'], odom_stiffness),
+            PoseToPoseCost(odometry['T_3_2'], odom_stiffness),
+            PoseToPoseCost(odometry['T_4_3'], odom_stiffness),
+            PoseToPoseCost(odometry['T_5_4'], odom_stiffness),
+            PoseToPoseCost(odometry['T_5_1'], loop_stiffness)
         ]
 
     @pytest.fixture
@@ -239,11 +239,11 @@ class TestBundleAdjust:
         problem = Problem(options)
 
         obs_var = [1, 1, 2]  # [u,v,d]
-        obs_covar = np.diagflat(np.array(obs_var))
+        obs_stiffness = np.diagflat(np.sqrt(obs_var))
 
         for i, this_pose_obs in enumerate(observations):
             for j, o in enumerate(this_pose_obs):
-                cost = ReprojectionCost(camera, o, np.linalg.inv(obs_covar))
+                cost = ReprojectionCost(camera, o, obs_stiffness)
                 problem.add_residual_block(
                     cost, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
 
@@ -294,11 +294,15 @@ class TestCovariance:
         problem = Problem(options)
 
         odom = SE3.exp(0.1 * np.ones(6))
-        odom_covar = 1e-3 * np.eye(SE3.dof)
-        T0_covar = 1e-6 * np.eye(SE3.dof)
 
-        cost0 = PoseCost(SE3.identity(), np.linalg.inv(T0_covar))
-        cost1 = PoseToPoseCost(odom, np.linalg.inv(odom_covar))
+        odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.eye(SE3.dof))
+        T0_stiffness = np.linalg.inv(np.sqrt(1e-6) * np.eye(SE3.dof))
+
+        odom_covar = np.linalg.inv(np.dot(odom_stiffness, odom_stiffness))
+        T0_covar = np.linalg.inv(np.dot(T0_stiffness, T0_stiffness))
+
+        cost0 = PoseCost(SE3.identity(), T0_stiffness)
+        cost1 = PoseToPoseCost(odom, odom_stiffness)
 
         params_init = {'T0': SE3.identity(), 'T1': SE3.identity()}
 

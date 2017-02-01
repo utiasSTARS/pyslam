@@ -29,7 +29,7 @@ camera = StereoCamera(640, 480, 1000, 1000, 0.25, 1280, 960)
 
 # Observations
 obs_var = [1, 1, 2]  # [u,v,d]
-obs_covar = np.diagflat(np.array(obs_var))
+obs_stiffness = np.diagflat(np.sqrt(obs_var))
 
 obs = [[camera.project(T * p)
         for p in pts_w_GT] for T in T_cam_w_GT]
@@ -43,7 +43,7 @@ problem = Problem(options)
 
 for i, this_pose_obs in enumerate(obs):
     for j, o in enumerate(this_pose_obs):
-        cost = ReprojectionCost(camera, o, np.linalg.inv(obs_covar))
+        cost = ReprojectionCost(camera, o, obs_stiffness)
         problem.add_residual_block(
             cost, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
 

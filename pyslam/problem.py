@@ -104,7 +104,7 @@ class Problem:
                     "Parameter {} has not been initialized".format(e.args[0]))
 
             residual = block.evaluate(params)
-            cost += np.dot(residual, np.dot(block.weight, residual))
+            cost += np.dot(residual, residual)
 
         return 0.5 * cost
 
@@ -124,8 +124,7 @@ class Problem:
 
             prev_cost = cost
 
-            if self.options.allow_nondecreasing_steps and \
-                    nondecreasing_steps_taken == 0:
+            if self.options.allow_nondecreasing_steps and nondecreasing_steps_taken == 0:
                 best_params = copy.deepcopy(self.param_dict)
 
             dx = self.solve_one_iter()
@@ -144,8 +143,7 @@ class Problem:
             # Check if done optimizing
             cost = self.eval_cost()
 
-            done_optimization = \
-                optimization_iters > self.options.max_iters or \
+            done_optimization = optimization_iters > self.options.max_iters or \
                 np.linalg.norm(dx) < self.options.min_update_norm or \
                 cost < self.options.min_cost
 
@@ -227,11 +225,19 @@ class Problem:
 
     def _build_precision_and_information(self):
         """Helper function to build the precision matrix and information vector for the Gauss-Newton update."""
+        # The Gauss-Newton step is given by
         # (H.T * W * H) dx = -H.T * W * e
+        # or
         # precision * dx = information
+        #
+        # However, in our case, W is subsumed into H by the stiffness parameter
+        # so instead we have
+        # (H'.T * H') dx = -H'.T * e
+        # where H' = sqrt(W) * H
+        # Note that this isn't exactly equivalent since the information vector is different,
+        # but it is more efficient, especially for high-dimensional residuals.
         H_blocks = [[None for _ in self.param_dict]
                     for _ in self.residual_blocks]
-        W_diag_blocks = [None for _ in self.residual_blocks]
         e_blocks = [[None] for _ in self.residual_blocks]
 
         block_cidx_dict = dict(zip(self.param_dict.keys(),
@@ -254,22 +260,18 @@ class Problem:
                         H_blocks[block_ridx][
                             block_cidx] = sparse.csr_matrix(jac)
 
-                W_diag_blocks[block_ridx] = sparse.csr_matrix(block.weight)
                 e_blocks[block_ridx][0] = residual
 
             block_ridx += 1
 
         # Annoying cleanup
-        W_diag_blocks = [block for block in W_diag_blocks if block is not None]
         e_blocks = [block for block in e_blocks if block[0] is not None]
 
         H = sparse.bmat(H_blocks, format='csr')
-        W = sparse.block_diag(W_diag_blocks, format='csr')
         e = np.squeeze(np.bmat(e_blocks).A)
 
-        HW = H.T.dot(W)
-        precision = HW.dot(H)
-        information = -HW.dot(e)
+        precision = H.T.dot(H)
+        information = -H.T.dot(e)
 
         return precision, information
 

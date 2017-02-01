@@ -49,29 +49,29 @@ T_6_0_init = SE3.exp(offset1) * T_6_0_true
 
 # Either we need a prior on the first pose, or it needs to be held constant
 # so that the resulting system of linear equations is solveable
-prior_weight = np.linalg.inv(1e-12 * np.identity(6))
-odom_weight = np.linalg.inv(1e-3 * np.identity(6))
-loop_weight = np.linalg.inv(1. * np.identity(6))
+prior_stiffness = np.linalg.inv(np.sqrt(1e-12) * np.identity(6))
+odom_stiffness = np.linalg.inv(np.sqrt(1e-3) * np.identity(6))
+loop_stiffness = np.linalg.inv(np.sqrt(1.) * np.identity(6))
 
-cost0 = PoseCost(T_1_0_obs, prior_weight)
+cost0 = PoseCost(T_1_0_obs, prior_stiffness)
 cost0_params = ['T_1_0']
 
-cost1 = PoseToPoseCost(T_2_1_obs, odom_weight)
+cost1 = PoseToPoseCost(T_2_1_obs, odom_stiffness)
 cost1_params = ['T_1_0', 'T_2_0']
 
-cost2 = PoseToPoseCost(T_3_2_obs, odom_weight)
+cost2 = PoseToPoseCost(T_3_2_obs, odom_stiffness)
 cost2_params = ['T_2_0', 'T_3_0']
 
-cost3 = PoseToPoseCost(T_4_3_obs, odom_weight)
+cost3 = PoseToPoseCost(T_4_3_obs, odom_stiffness)
 cost3_params = ['T_3_0', 'T_4_0']
 
-cost4 = PoseToPoseCost(T_5_4_obs, odom_weight)
+cost4 = PoseToPoseCost(T_5_4_obs, odom_stiffness)
 cost4_params = ['T_4_0', 'T_5_0']
 
-cost5 = PoseToPoseCost(T_6_5_obs, odom_weight)
+cost5 = PoseToPoseCost(T_6_5_obs, odom_stiffness)
 cost5_params = ['T_5_0', 'T_6_0']
 
-cost6 = PoseToPoseCost(T_6_2_obs, loop_weight)
+cost6 = PoseToPoseCost(T_6_2_obs, loop_stiffness)
 cost6_params = ['T_2_0', 'T_6_0']
 
 options = Options()
