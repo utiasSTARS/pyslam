@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.sparse as sparse
 
 from liegroups import SE3
 
@@ -20,7 +21,7 @@ class QuadraticCost:
                              - self.y])
 
         if compute_jacobians:
-            jacobians = [None for _ in range(len(params))]
+            jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
                 jacobians[0] = self.x * self.x
@@ -50,7 +51,7 @@ class PoseCost:
         residual = self.obstype.log(T_est * self.T_obs.inv())
 
         if compute_jacobians:
-            jacobians = [None for _ in range(len(params))]
+            jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
                 jacobians[0] = np.identity(self.obstype.dof)
@@ -76,7 +77,7 @@ class PoseToPoseCost:
             T_2_0_est * T_1_0_est.inv() * self.T_2_1_obs.inv())
 
         if compute_jacobians:
-            jacobians = [None for _ in range(len(params))]
+            jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
                 jacobians[0] = -T_2_0_est.adjoint()
@@ -103,7 +104,7 @@ class ReprojectionCost:
         pt_cam = T_cam_w * pt_w
 
         if compute_jacobians:
-            jacobians = [None for _ in range(len(params))]
+            jacobians = [None for _ in enumerate(params)]
 
             predicted_obs, cam_jacobian = self.camera.project(
                 pt_cam, compute_jacobians=True)
@@ -122,15 +123,15 @@ class ReprojectionCost:
 
 
 class PhotometricCost:
-    """Photometric cost for greyscale images."""
+    """Photometric cost for greyscale images. Uses the pre-computed reference image jacobian as an approximation to the tracking image jacobian."""
 
-    def __init__(self, camera, im_ref, disp_ref, im_track, jac_ref, weight):
+    def __init__(self, camera, im_ref, disp_ref, jac_ref, im_track, pixel_weight):
         self.camera = camera
         self.im_ref = im_ref
         self.disp_ref = disp_ref
         self.im_track = im_track
         self.jac_ref = jac_ref
-        self.weight = weight
+        self.pixel_weight = pixel_weight
         self.u, self.v = np.meshgrid(list(range(0, camera.w)),
                                      list(range(0, camera.h)),
                                      indexing='xy')
@@ -141,24 +142,36 @@ class PhotometricCost:
         uvd_ref = np.array([self.u.flatten(), self.v.flatten(),
                             self.disp_ref.flatten()]).T
         im_ref_true = self.im_ref.flatten()
+        if compute_jacobians:
+            im_jac = np.array([self.jac_ref[0, :, :].flatten(),
+                               self.jac_ref[1, :, :].flatten()]).T
 
         # Filter out bad measurements (NaN disparity)
         valid_ref = self.camera.is_valid_measurement(uvd_ref)
         uvd_ref = uvd_ref[valid_ref, :]
         im_ref_true = im_ref_true[valid_ref]
+        if compute_jacobians:
+            im_jac = im_jac[valid_ref, :]
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
         pt_ref = self.camera.triangulate(np.array(uvd_ref))
         pt_track = T_track_ref * pt_ref
-        uvd_track = self.camera.project(pt_track)
+        if compute_jacobians:
+            uvd_track, project_jac = self.camera.project(
+                pt_track, compute_jacobians=True)
+        else:
+            uvd_track = self.camera.project(pt_track)
 
         # Filter out bad measurements (out of bounds coordinates, nonpositive
         # disparity)
         valid_track = self.camera.is_valid_measurement(uvd_track)
         uvd_track = uvd_track[valid_track, :]
-        uvd_ref = uvd_ref[valid_track]
+        pt_track = pt_track[valid_track, :]
         im_ref_true = im_ref_true[valid_track]
+        if compute_jacobians:
+            im_jac = im_jac[valid_track, :]
+            project_jac = project_jac[valid_track, :, :]
 
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
@@ -166,7 +179,29 @@ class PhotometricCost:
             self.im_track, uvd_track[:, 0], uvd_track[:, 1])
         residual = im_ref_est - im_ref_true
 
+        self.weight = np.empty(len(residual))
+        self.weight.fill(self.pixel_weight)
+        self.weight = sparse.diags(self.weight)
+
+        # Jacobian time!
+        if compute_jacobians:
+            jacobians = [None for _ in enumerate(params)]
+
+            if compute_jacobians[0]:
+                jac_blocks = [[None] for _ in enumerate(residual)]
+                for i, block in enumerate(jac_blocks):
+                    jac_blocks[i][0] = np.atleast_2d(
+                        im_jac[i, :].dot(
+                            project_jac[i, 0:2, :].dot(
+                                SE3.odot(pt_track[i, :])))
+                    )
+
+                jacobians[0] = np.bmat(jac_blocks).A
+
+            return residual, jacobians
+
         # DEBUG: Rebuild the residual image as a sanity check
+        # uvd_ref = uvd_ref[valid_track]
         # residual_image = np.empty(self.im_ref.shape)
         # residual_image.fill(np.nan)
         # residual_image[uvd_ref.astype(int)[:, 1],

@@ -265,7 +265,7 @@ class Problem:
 
         H = sparse.bmat(H_blocks, format='csr')
         W = sparse.block_diag(W_diag_blocks, format='csr')
-        e = np.bmat(e_blocks).A.T.flatten()
+        e = np.squeeze(np.bmat(e_blocks).A)
 
         HW = H.T.dot(W)
         precision = HW.dot(H)
