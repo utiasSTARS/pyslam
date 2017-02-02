@@ -21,10 +21,31 @@ dataset.load_calib()
 dataset.load_gray(format='cv2')
 dataset.load_oxts()
 
+# Parameters to estimate
+T_0_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
+    np.linalg.inv(dataset.oxts[0].T_w_imu)))
+T_1_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
+    np.linalg.inv(dataset.oxts[1].T_w_imu)))
+T_0_w.normalize()
+T_1_w.normalize()
+T_1_0_true = T_1_w * T_0_w.inv()
+
+# params_init = {'T_1_0': T_1_0_true}
+# params_init = {'T_1_0': SE3.identity()}
+# params_init = {'T_1_0': SE3.from_matrix(
+#     np.array([[0.99999976,  0.0003423,   0.00060361,  0.01976551],
+#               [-0.00034254,  0.99999987,  0.00038914,  0.0249602],
+#               [-0.00060348, -0.00038935,  0.99999974, - 0.57019808],
+#               [0.,          0.,        0.,      1.]]))}
+
+# Scaling parameters
+pyrlevels = 2
+pyrfactor = 1. / 2.**pyrlevels
+
 # Disparity computation parameters
 window_size = 5
 min_disp = 0
-max_disp = 32 + min_disp
+max_disp = np.max([16, np.int(64 * pyrfactor)]) + min_disp
 
 # Use semi-global block matching
 stereo = cv2.StereoSGBM_create(
@@ -38,8 +59,11 @@ stereo = cv2.StereoSGBM_create(
 
 impairs = []
 for ims in dataset.gray:
-    imL = cv2.pyrDown(ims.left)
-    imR = cv2.pyrDown(ims.right)
+    imL = ims.left
+    imR = ims.right
+    for _ in range(pyrlevels):
+        imL = cv2.pyrDown(imL)
+        imR = cv2.pyrDown(imR)
     impairs.append([imL, imR])
 
 disp = []
@@ -65,13 +89,13 @@ for ims in impairs:
                             grady.astype(float) / 255.]))
 
 # Create the camera
-fu = dataset.calib.K_cam0[0, 0] / 2.
-fv = dataset.calib.K_cam0[1, 1] / 2.
-cu = dataset.calib.K_cam0[0, 2] / 2.
-cv = dataset.calib.K_cam0[1, 2] / 2.
+fu = dataset.calib.K_cam0[0, 0] * pyrfactor
+fv = dataset.calib.K_cam0[1, 1] * pyrfactor
+cu = dataset.calib.K_cam0[0, 2] * pyrfactor
+cv = dataset.calib.K_cam0[1, 2] * pyrfactor
 b = dataset.calib.b_gray
-w = dataset.gray[0].left.shape[1] / 2.
-h = dataset.gray[0].left.shape[0] / 2.
+w = impairs[0][0].shape[1]
+h = impairs[0][0].shape[0]
 camera = StereoCamera(cu, cv, fu, fv, b, w, h)
 
 # Create the cost function
@@ -80,17 +104,6 @@ disp_ref = disp[0]
 im_track = impairs[1][0].astype(float) / 255.
 jac_ref = im_jac[0]
 cost = PhotometricCost(camera, im_ref, disp_ref, jac_ref, im_track, 1.)
-
-T_0_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
-    np.linalg.inv(dataset.oxts[0].T_w_imu)))
-T_1_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
-    np.linalg.inv(dataset.oxts[1].T_w_imu)))
-T_0_w.normalize()
-T_1_w.normalize()
-T_1_0_true = T_1_w * T_0_w.inv()
-
-params_init = {'T_1_0': T_1_0_true}
-# params_init = {'T_1_0': SE3.identity()}
 
 import time
 iters = 100
