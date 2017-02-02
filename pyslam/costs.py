@@ -195,7 +195,7 @@ class PhotometricCost:
         residual = self.stiffness * (im_ref_est - im_ref_true)
 
         # DEBUG: Rebuild residual and disparity images
-        self._rebuild_images(residual, im_ref_est, im_ref_true, valid_track)
+        # self._rebuild_images(residual, im_ref_est, im_ref_true, valid_track)
 
         # Jacobian time!
         if compute_jacobians:
@@ -213,25 +213,20 @@ class PhotometricCost:
         """Debug function to rebuild the filtered 
         residual and disparity images as a sanity check"""
         uvd_ref = self.uvd_ref[valid_track]
+        imshape = (self.camera.h, self.camera.w)
 
-        self.actual_reference_image = np.empty(
-            (self.camera.h, self.camera.w))
-        self.actual_reference_image.fill(np.nan)
+        self.actual_reference_image = np.full(imshape, np.nan)
         self.actual_reference_image[uvd_ref.astype(int)[:, 1],
                                     uvd_ref.astype(int)[:, 0]] = im_ref_true
 
-        self.estimated_reference_image = np.empty(
-            (self.camera.h, self.camera.w))
-        self.estimated_reference_image.fill(np.nan)
+        self.estimated_reference_image = np.full(imshape, np.nan)
         self.estimated_reference_image[uvd_ref.astype(int)[:, 1],
                                        uvd_ref.astype(int)[:, 0]] = im_ref_est
 
-        self.residual_image = np.empty((self.camera.h, self.camera.w))
-        self.residual_image.fill(np.nan)
+        self.residual_image = np.full(imshape, np.nan)
         self.residual_image[uvd_ref.astype(int)[:, 1],
                             uvd_ref.astype(int)[:, 0]] = residual
 
-        self.disparity_image = np.empty((self.camera.h, self.camera.w))
-        self.disparity_image.fill(np.nan)
+        self.disparity_image = np.full(imshape, np.nan)
         self.disparity_image[uvd_ref.astype(int)[:, 1],
                              uvd_ref.astype(int)[:, 0]] = uvd_ref[:, 2]

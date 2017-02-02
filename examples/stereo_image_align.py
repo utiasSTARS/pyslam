@@ -8,7 +8,6 @@ from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
 from pyslam.costs import PhotometricCost
-from pyslam.utils import bilinear_interpolate
 
 # Load KITTI data
 basedir = '/Users/leeclement/Desktop/odometry_raw/'
@@ -31,7 +30,7 @@ T_1_w.normalize()
 T_1_0_true = T_1_w * T_0_w.inv()
 
 # params_init = {'T_1_0': T_1_0_true}
-# params_init = {'T_1_0': SE3.identity()}
+params_init = {'T_1_0': SE3.identity()}
 # params_init = {'T_1_0': SE3.from_matrix(
 #     np.array([[0.99999976,  0.0003423,   0.00060361,  0.01976551],
 #               [-0.00034254,  0.99999987,  0.00038914,  0.0249602],
@@ -39,7 +38,7 @@ T_1_0_true = T_1_w * T_0_w.inv()
 #               [0.,          0.,        0.,      1.]]))}
 
 # Scaling parameters
-pyrlevels = 2
+pyrlevels = 0
 pyrfactor = 1. / 2.**pyrlevels
 
 # Disparity computation parameters
@@ -74,9 +73,6 @@ for ims in impairs:
 for i, d in enumerate(disp):
     disp[i][d < min_disp + 1] = np.nan
     disp[i][d > max_disp] = np.nan
-    # missing_row = np.empty([1, d.shape[1]])
-    # missing_row.fill(np.nan)
-    # disp[i] = np.vstack([disp[i], missing_row])
 
 # Compute image jacobians
 im_jac = []
@@ -127,7 +123,8 @@ print("Average time per iteration: {} sec".format((end - start) / iters))
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
-options.min_cost_decrease = 0.99
+options.min_cost_decrease = 1.
+options.max_iters = 1e6
 
 problem = Problem(options)
 problem.add_residual_block(cost, ['T_1_0'])
