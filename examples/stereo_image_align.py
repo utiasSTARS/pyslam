@@ -89,17 +89,32 @@ T_0_w.normalize()
 T_1_w.normalize()
 T_1_0_true = T_1_w * T_0_w.inv()
 
-# params_init = {'T_1_0': T_1_0_true}
-params_init = {'T_1_0': SE3.identity()}
+params_init = {'T_1_0': T_1_0_true}
+# params_init = {'T_1_0': SE3.identity()}
 
-# residual, jacobians = cost.evaluate([params_init['T_1_0']], [True])
-# residual = cost.evaluate([params_init['T_1_0']])
+import time
+iters = 100
+start = time.perf_counter()
+for _ in range(iters):
+    residual = cost.evaluate([params_init['T_1_0']])
+end = time.perf_counter()
+print("Eval only")
+print("Elapsed time : {} sec".format(end - start))
+print("Average time per iteration: {} sec".format((end - start) / iters))
+
+start = time.perf_counter()
+for _ in range(iters):
+    residual, jacobians = cost.evaluate([params_init['T_1_0']], [True])
+end = time.perf_counter()
+print("Eval + Jacobian")
+print("Elapsed time: {} sec".format(end - start))
+print("Average time per iteration: {} sec".format((end - start) / iters))
 
 # Optimize
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
-options.min_cost_decrease = 1.
+options.min_cost_decrease = 0.99
 
 problem = Problem(options)
 problem.add_residual_block(cost, ['T_1_0'])

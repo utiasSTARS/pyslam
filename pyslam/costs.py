@@ -129,41 +129,50 @@ class ReprojectionCost:
 
 
 class PhotometricCost:
-    """Photometric cost for greyscale images. Uses the pre-computed reference image jacobian as an approximation to the tracking image jacobian."""
+    """Photometric cost for greyscale images.
+    Uses the pre-computed reference image jacobian as an approximation to the
+    tracking image jacobian under the assumption that the camera motion is small."""
 
     def __init__(self, camera, im_ref, disp_ref, jac_ref, im_track, stiffness):
         self.camera = camera
-        self.im_ref = im_ref
-        self.disp_ref = disp_ref
-        self.im_track = im_track
-        self.jac_ref = jac_ref
         self.stiffness = stiffness
-        self.u, self.v = np.meshgrid(list(range(0, camera.w)),
-                                     list(range(0, camera.h)),
-                                     indexing='xy')
+        self.im_track = im_track
+
+        self.im_ref = im_ref.flatten()
+
+        u, v = np.meshgrid(list(range(0, camera.w)),
+                           list(range(0, camera.h)), indexing='xy')
+        self.uvd_ref = np.array(
+            [u.flatten(), v.flatten(), disp_ref.flatten()]).T
+
+        self.jac_ref = np.array([jac_ref[0, :, :].flatten(),
+                                 jac_ref[1, :, :].flatten()]).T
+
+        # Filter out invalid pixels (NaN or negative disparity)
+        valid_pixels = self.camera.is_valid_measurement(self.uvd_ref)
+        self.uvd_ref = self.uvd_ref[valid_pixels, :]
+        self.im_ref = self.im_ref[valid_pixels]
+        self.jac_ref = self.jac_ref[valid_pixels, :]
+
+        # Filter out pixels with weak gradients
+        grad_ref = np.einsum('ij->i', self.jac_ref**2)  # squared norms
+        strong_pixels = grad_ref > 0.5**2
+        self.uvd_ref = self.uvd_ref[strong_pixels, :]
+        self.im_ref = self.im_ref[strong_pixels]
+        self.jac_ref = self.jac_ref[strong_pixels, :]
+
+        # Precompute triangulated 3D points
+        self.pt_ref = self.camera.triangulate(np.array(self.uvd_ref))
 
     def evaluate(self, params, compute_jacobians=None):
         T_track_ref = params[0]
 
-        uvd_ref = np.array([self.u.flatten(), self.v.flatten(),
-                            self.disp_ref.flatten()]).T
-        im_ref_true = self.im_ref.flatten()
-        if compute_jacobians:
-            im_jac = np.array([self.jac_ref[0, :, :].flatten(),
-                               self.jac_ref[1, :, :].flatten()]).T
-
-        # Filter out bad measurements (NaN disparity)
-        valid_ref = self.camera.is_valid_measurement(uvd_ref)
-        uvd_ref = uvd_ref[valid_ref, :]
-        im_ref_true = im_ref_true[valid_ref]
-        if compute_jacobians:
-            im_jac = im_jac[valid_ref, :]
-
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
-        pt_ref = self.camera.triangulate(np.array(uvd_ref))
-        pt_track = T_track_ref * pt_ref
+        im_ref_true = self.im_ref
+        pt_track = T_track_ref * self.pt_ref
         if compute_jacobians:
+            im_jac = self.jac_ref
             uvd_track, project_jac = self.camera.project(
                 pt_track, compute_jacobians=True)
         else:
@@ -185,6 +194,13 @@ class PhotometricCost:
             self.im_track, uvd_track[:, 0], uvd_track[:, 1])
         residual = self.stiffness * (im_ref_est - im_ref_true)
 
+        # DEBUG: Rebuild the residual image as a sanity check
+        uvd_ref = self.uvd_ref[valid_track]
+        self.residual_image = np.empty((self.camera.h, self.camera.w))
+        self.residual_image.fill(np.nan)
+        self.residual_image[uvd_ref.astype(int)[:, 1],
+                            uvd_ref.astype(int)[:, 0]] = residual
+
         # Jacobian time!
         if compute_jacobians:
             jacobians = [None for _ in enumerate(params)]
@@ -194,13 +210,5 @@ class PhotometricCost:
                                          im_jac, project_jac[:, 0:2, :], SE3.odot(pt_track))
 
             return residual, jacobians
-
-        # DEBUG: Rebuild the residual image as a sanity check
-        # uvd_ref = uvd_ref[valid_track]
-        # residual_image = np.empty(self.im_ref.shape)
-        # residual_image.fill(np.nan)
-        # residual_image[uvd_ref.astype(int)[:, 1],
-        #                uvd_ref.astype(int)[:, 0]] = residual
-        # return residual_image
 
         return residual
