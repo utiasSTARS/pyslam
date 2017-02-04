@@ -1,8 +1,34 @@
 import numpy as np
+import time
 
 from liegroups import SE3
 
-from pyslam.utils import bilinear_interpolate
+from pyslam.utils import bilinear_interpolate, stackmul
+from numba import guvectorize, float64
+
+
+@guvectorize([(float64[:], float64[:], float64[:, :])], '(n),(m)->(n,m)', nopython=True, cache=True, target='parallel')
+def parallel_SE3_odot(p, junk, out):
+    out[0, 0] = 1.
+    out[0, 1] = 0.
+    out[0, 2] = 0.
+    out[0, 3] = 0.
+    out[0, 4] = p[2]
+    out[0, 5] = -p[1]
+
+    out[1, 0] = 0.
+    out[1, 1] = 1.
+    out[1, 2] = 0.
+    out[1, 3] = -p[2]
+    out[1, 4] = 0.
+    out[1, 5] = p[0]
+
+    out[2, 0] = 0.
+    out[2, 1] = 0.
+    out[2, 2] = 1.
+    out[2, 3] = p[1]
+    out[2, 4] = -p[0]
+    out[2, 5] = 0.
 
 
 class PhotometricCost:
@@ -32,8 +58,8 @@ class PhotometricCost:
         self.jac_ref = self.jac_ref[valid_pixels, :]
 
         # Filter out pixels with weak gradients
-        grad_ref = np.einsum('ij->i', self.jac_ref**2)  # squared norms
-        strong_pixels = grad_ref > 0.5**2
+        grad_ref = np.sum(self.jac_ref**2, axis=1)
+        strong_pixels = grad_ref >= 0.5**2
         self.uvd_ref = self.uvd_ref[strong_pixels, :]
         self.im_ref = self.im_ref[strong_pixels]
         self.jac_ref = self.jac_ref[strong_pixels, :]
@@ -79,8 +105,28 @@ class PhotometricCost:
             jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
-                jacobians[0] = np.einsum('...i,...ij,...jk->...k',
-                                         im_jac, project_jac[:, 0:2, :], SE3.odot(pt_track))
+                # jacobians[0] = self.stiffness * np.einsum('...i,...ij,...jk->...k',
+                # im_jac, project_jac[:, 0:2, :], SE3.odot(pt_track))
+                jacobians[0] = np.empty([im_jac.shape[0], 1, 6])
+                temp = np.empty([im_jac.shape[0], 1, 3])
+                im_jac = np.expand_dims(im_jac, axis=1)
+
+                # start = time.perf_counter()
+                # np.matmul(im_jac, project_jac[:, 0:2, :], out=temp)
+                stackmul(im_jac, project_jac[:, 0:2, :], temp)
+                # end = time.perf_counter()
+                # print('mult1 {:5} sec'.format(end - start))
+
+                # start = time.perf_counter()
+                # odot_pt_track = SE3.odot(pt_track)
+                odot_pt_track = np.empty([im_jac.shape[0], 3, 6])
+                parallel_SE3_odot(pt_track, np.empty(6), odot_pt_track)
+                # np.matmul(temp, odot_pt_track, out=jacobians[0])
+                stackmul(temp, odot_pt_track, jacobians[0])
+                # end = time.perf_counter()
+                # print('mult2 {:5} sec'.format(end - start))
+
+                jacobians[0] = np.squeeze(jacobians[0])
 
             return residual, jacobians
 

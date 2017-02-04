@@ -4,6 +4,7 @@ Non-linear least-squares SLAM in Python using scipy and numpy. Modelled after Go
 Dependencies:
 * numpy (for most things)
 * scipy (for sparse linear algebra)
+* numba (for parallel vectorization speedups)
 * [liegroups](https://gitlab.com/utiasSTARS/liegroups)
 
 ### Installation

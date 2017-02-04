@@ -1,5 +1,5 @@
 import copy
-# import itertools
+import time
 
 import numpy as np
 import scipy.sparse as sparse
@@ -174,25 +174,35 @@ class Problem:
             # Print iteration summary
             if self.options.print_iter_summary:
                 print('Iter: {:3} | Cost: {:12e} --> {:12e}  ({:+5.0%})'.format(
-                    optimization_iters, prev_cost, cost, 1. - cost / prev_cost))
+                    optimization_iters, prev_cost, cost, cost / prev_cost - 1.))
 
         # Print optimization summary
         if self.options.print_summary:
             print('Iterations: {:3} | Cost: {:12e} --> {:12e}  ({:+5.0%})'.format(
                 optimization_iters,
                 self._cost_history[0], self._cost_history[-1],
-                1. - self._cost_history[-1] / self._cost_history[0]))
+                self._cost_history[-1] / self._cost_history[0] - 1.))
 
         return self.param_dict
 
     def solve_one_iter(self):
         """Solve one iteration of Gauss-Newton."""
         # precision * dx = information
+        start = time.perf_counter()
         precision, information = self._build_precision_and_information()
+        end = time.perf_counter()
+        print('build_precision_and_information: {:.5f} s'.format(end - start))
+
+        start = time.perf_counter()
         dx = splinalg.spsolve(precision, information)
+        end = time.perf_counter()
+        print('spsolve: {:.5f} s'.format(end - start))
 
         # Backtrack line search
+        start = time.perf_counter()
         best_step_size = self._do_line_search(dx)
+        end = time.perf_counter()
+        print('do_line_search: {:.5f} s'.format(end - start))
 
         return best_step_size * dx
 

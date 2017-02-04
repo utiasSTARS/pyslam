@@ -34,7 +34,7 @@ T_1_0_true = T_1_w * T_0_w.inv()
 params_init = {'T_1_0': SE3.identity()}
 
 # Scaling parameters
-pyrlevels = [3, 2]
+pyrlevels = [2, 1, 0]
 
 params = params_init
 
@@ -107,6 +107,20 @@ for pyrlevel in pyrlevels:
     im_track = impairs[1][0].astype(float) / 255.
     jac_ref = im_jac[0]
     cost = PhotometricCost(camera, im_ref, disp_ref, jac_ref, im_track, 1.)
+
+    # # Timing debug
+    # niters = 100
+    # start = time.perf_counter()
+    # for _ in range(niters):
+    #     cost.evaluate([params_init['T_1_0']])
+    # end = time.perf_counter()
+    # print('cost.evaluate avg {} s', (end - start) / niters)
+
+    # start = time.perf_counter()
+    # for _ in range(niters):
+    #     cost.evaluate([params_init['T_1_0']], [True])
+    # end = time.perf_counter()
+    # print('cost.evaluate w jac avg {} s', (end - start) / niters)
 
     # Optimize
     start = time.perf_counter()

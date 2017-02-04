@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+from numba import guvectorize, int32, int64, float32, float64
 
 
 def invsqrt(x):
@@ -39,3 +40,14 @@ def bilinear_interpolate(im, x, y):
     wd = (x - x0) * (y - y0)
 
     return wa * Ia + wb * Ib + wc * Ic + wd * Id
+
+
+@guvectorize([(float64[:, :], float64[:, :], float64[:, :])],
+             '(n,m),(m,p)->(n,p)', nopython=True, target='parallel')
+def stackmul(A, B, out):
+    """Multiply two stacks of matrices in parallel."""
+    for i in range(out.shape[0]):
+        for j in range(out.shape[1]):
+            out[i, j] = 0.
+            for k in range(A.shape[1]):
+                out[i, j] += A[i, k] * B[k, j]
