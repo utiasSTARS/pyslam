@@ -220,8 +220,8 @@ class Problem:
         try:
             p0_range = self._update_partition_dict[param0]
             p1_range = self._update_partition_dict[param1]
-            return self._covariance_matrix[
-                p0_range.start:p0_range.stop, p1_range.start:p1_range.stop]
+            return np.squeeze(self._covariance_matrix[
+                p0_range.start:p0_range.stop, p1_range.start:p1_range.stop])
         except KeyError as e:
             print(
                 'Cannot compute covariance for constant parameter {}'.format(e.args[0]))

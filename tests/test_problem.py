@@ -67,7 +67,7 @@ class TestBasic:
         problem = Problem()
         for x, y in zip(x_data, y_data):
             problem.add_residual_block(QuadraticCost(
-                x, y, 1.), params_init)
+                x, y, 1.), params_init.keys())
 
         problem.initialize_params(params_init)
         params_final = problem.solve()
