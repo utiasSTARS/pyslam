@@ -283,12 +283,14 @@ class Problem:
         # or
         # precision * dx = information
         #
-        # However, in our case, W is subsumed into H by the stiffness parameter
+        # However, in our case, W is subsumed into H and e by the stiffness parameter
         # so instead we have
-        # (H'.T * H') dx = -H'.T * e
-        # where H' = sqrt(W) * H
-        # Note that this isn't exactly equivalent since the information vector is different,
-        # but it is more efficient, especially for high-dimensional residuals.
+        # (H'.T * H') dx = -H'.T * e'
+        # where H' = sqrt(W) * H and e' = sqrt(W) * e
+        #
+        # Note that this is an exactly equivalent formulation, but avoids needing
+        # to explicitly construct and multiply the (possibly very large) W
+        # matrix.
         H_blocks = [[None for _ in self.param_dict]
                     for _ in self.residual_blocks]
         e_blocks = [None for _ in self.residual_blocks]
