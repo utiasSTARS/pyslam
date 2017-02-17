@@ -72,8 +72,8 @@ class TestBasic:
         problem.initialize_params(params_init)
         params_final = problem.solve()
 
-        for p_final, p_true in zip(params_final.values(), params_true.values()):
-            assert np.allclose(p_final, p_true)
+        for key in params_true.keys():
+            assert(np.allclose(params_final[key], params_true[key]))
 
 
 class TestPoseGraphRelax:
