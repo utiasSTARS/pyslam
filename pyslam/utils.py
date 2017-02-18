@@ -1,12 +1,12 @@
 import numpy as np
-import scipy as sp
+import scipy.linalg as splinalg
 from numba import guvectorize, int32, int64, float32, float64
 
 
 def invsqrt(x):
     """Convenience function to compute the inverse square root of a scalar or a square matrix."""
     if hasattr(x, 'shape'):
-        return np.linalg.inv(sp.linalg.sqrtm(x))
+        return np.linalg.inv(splinalg.sqrtm(x))
 
     return 1. / np.sqrt(x)
 
