@@ -34,7 +34,7 @@ T_1_0_true = T_1_w * T_0_w.inv()
 params_init = {'T_1_0': SE3.identity()}
 
 # Scaling parameters
-pyrlevels = [2, 1, 0]
+pyrlevels = [0]
 
 params = params_init
 
@@ -108,27 +108,27 @@ for pyrlevel in pyrlevels:
     jac_ref = im_jac[0]
     cost = PhotometricCost(camera, im_ref, disp_ref, jac_ref, im_track, 1.)
 
-    # # Timing debug
-    # niters = 100
-    # start = time.perf_counter()
-    # for _ in range(niters):
-    #     cost.evaluate([params_init['T_1_0']])
-    # end = time.perf_counter()
-    # print('cost.evaluate avg {} s', (end - start) / niters)
-
-    # start = time.perf_counter()
-    # for _ in range(niters):
-    #     cost.evaluate([params_init['T_1_0']], [True])
-    # end = time.perf_counter()
-    # print('cost.evaluate w jac avg {} s', (end - start) / niters)
-
-    # Optimize
+    # Timing debug
+    niters = 100
     start = time.perf_counter()
-
-    problem = Problem(options)
-    problem.add_residual_block(cost, ['T_1_0'])
-    problem.initialize_params(params)
-    params = problem.solve()
-
+    for _ in range(niters):
+        cost.evaluate([params_init['T_1_0']])
     end = time.perf_counter()
-    print(end - start)
+    print('cost.evaluate avg {} s', (end - start) / niters)
+
+    start = time.perf_counter()
+    for _ in range(niters):
+        cost.evaluate([params_init['T_1_0']], [True])
+    end = time.perf_counter()
+    print('cost.evaluate w jac avg {} s', (end - start) / niters)
+
+    # # Optimize
+    # start = time.perf_counter()
+
+    # problem = Problem(options)
+    # problem.add_residual_block(cost, ['T_1_0'])
+    # problem.initialize_params(params)
+    # params = problem.solve()
+
+    # end = time.perf_counter()
+    # print(end - start)

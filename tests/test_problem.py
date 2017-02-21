@@ -85,12 +85,12 @@ class TestPoseGraphRelax:
             'T_0_w': SE2.identity(),
             'T_1_w': SE2(SO2.identity(), -np.array([0.5, 0])),
             'T_2_w': SE2(SO2.identity(), -np.array([1, 0])),
-            'T_3_w': SE2(SO2.fromangle(np.pi / 2),
-                         -(SO2.fromangle(np.pi / 2) * np.array([1, 0.5]))),
-            'T_4_w': SE2(SO2.fromangle(np.pi), -
-                         (SO2.fromangle(np.pi) * np.array([0.5, 0.5]))),
-            'T_5_w': SE2(SO2.fromangle(-np.pi / 2),
-                         -(SO2.fromangle(-np.pi / 2) * np.array([0.5, 0])))
+            'T_3_w': SE2(SO2.from_angle(np.pi / 2),
+                         -(SO2.from_angle(np.pi / 2) * np.array([1, 0.5]))),
+            'T_4_w': SE2(SO2.from_angle(np.pi), -
+                         (SO2.from_angle(np.pi) * np.array([0.5, 0.5]))),
+            'T_5_w': SE2(SO2.from_angle(-np.pi / 2),
+                         -(SO2.from_angle(-np.pi / 2) * np.array([0.5, 0])))
         }
         return T_k_w
 
