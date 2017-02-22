@@ -86,7 +86,7 @@ problem.add_residual_block(cost2, cost2_params)
 problem.add_residual_block(cost3, cost3_params)
 problem.add_residual_block(cost4, cost4_params)
 problem.add_residual_block(cost5, cost5_params)
-# problem.add_residual_block(cost6, cost6_params)
+problem.add_residual_block(cost6, cost6_params)
 
 # problem.set_parameters_constant(cost0_params)
 # problem.set_parameters_constant(cost1_params)

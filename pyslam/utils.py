@@ -43,7 +43,7 @@ def bilinear_interpolate(im, x, y):
 
 
 @guvectorize([(float64[:, :], float64[:, :], float64[:, :])],
-             '(n,m),(m,p)->(n,p)', nopython=True, target='parallel')
+             '(n,m),(m,p)->(n,p)', nopython=True, cache=True, target='parallel')
 def stackmul(A, B, out):
     """Multiply two stacks of matrices in parallel."""
     for i in range(out.shape[0]):

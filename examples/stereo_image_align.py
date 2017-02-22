@@ -11,7 +11,7 @@ from pyslam.costs import PhotometricCost
 import time
 
 # Load KITTI data
-basedir = '/Users/leeclement/Desktop/odometry_raw/'
+basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
 frame_range = [0, 1]
@@ -34,7 +34,7 @@ T_1_0_true = T_1_w * T_0_w.inv()
 params_init = {'T_1_0': SE3.identity()}
 
 # Scaling parameters
-pyrlevels = [0]
+pyrlevels = [3, 2, 1]
 
 params = params_init
 
@@ -42,7 +42,7 @@ options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
 options.min_cost_decrease = 0.99
-options.max_iters = 1e6
+# options.max_iters = 100
 # options.print_iter_summary = True
 
 for pyrlevel in pyrlevels:
@@ -84,10 +84,10 @@ for pyrlevel in pyrlevels:
     # Compute image jacobians
     im_jac = []
     for ims in impairs:
-        # gradx = cv2.Sobel(ims[0], -1, 1, 0)
-        # grady = cv2.Sobel(ims[0], -1, 0, 1)
-        gradx = cv2.Scharr(ims[0], -1, 1, 0)
-        grady = cv2.Scharr(ims[0], -1, 0, 1)
+        gradx = cv2.Sobel(ims[0], -1, 1, 0)
+        grady = cv2.Sobel(ims[0], -1, 0, 1)
+        # gradx = cv2.Scharr(ims[0], -1, 1, 0)
+        # grady = cv2.Scharr(ims[0], -1, 0, 1)
         im_jac.append(np.array([gradx.astype(float) / 255.,
                                 grady.astype(float) / 255.]))
 
@@ -109,26 +109,29 @@ for pyrlevel in pyrlevels:
     cost = PhotometricCost(camera, im_ref, disp_ref, jac_ref, im_track, 1.)
 
     # Timing debug
-    niters = 100
-    start = time.perf_counter()
-    for _ in range(niters):
-        cost.evaluate([params_init['T_1_0']])
-    end = time.perf_counter()
-    print('cost.evaluate avg {} s', (end - start) / niters)
-
-    start = time.perf_counter()
-    for _ in range(niters):
-        cost.evaluate([params_init['T_1_0']], [True])
-    end = time.perf_counter()
-    print('cost.evaluate w jac avg {} s', (end - start) / niters)
-
-    # # Optimize
+    # niters = 100
     # start = time.perf_counter()
-
-    # problem = Problem(options)
-    # problem.add_residual_block(cost, ['T_1_0'])
-    # problem.initialize_params(params)
-    # params = problem.solve()
-
+    # for _ in range(niters):
+    #     cost.evaluate([params_init['T_1_0']])
     # end = time.perf_counter()
-    # print(end - start)
+    # print('cost.evaluate avg {} s', (end - start) / niters)
+
+    # start = time.perf_counter()
+    # for _ in range(niters):
+    #     cost.evaluate([params_init['T_1_0']], [True])
+    # end = time.perf_counter()
+    # print('cost.evaluate w jac avg {} s', (end - start) / niters)
+
+    # Optimize
+    start = time.perf_counter()
+
+    problem = Problem(options)
+    problem.add_residual_block(cost, ['T_1_0'])
+    problem.initialize_params(params)
+    params = problem.solve()
+
+    end = time.perf_counter()
+    print('Elapsed time: {} s'.format(end - start))
+
+    print('Error in T_1_0: {}'.format(
+        SE3.log(T_1_0_true * params['T_1_0'].inv())))

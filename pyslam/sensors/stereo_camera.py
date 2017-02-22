@@ -20,9 +20,15 @@ class StereoCamera:
         if not uvd.shape[1] == 3:
             raise ValueError("uvd must have shape (3,) or (N,3)")
 
-        return (uvd[:, 0] > 0.) & (uvd[:, 0] < self.w) & \
-            (uvd[:, 1] > 0.) & (uvd[:, 1] < self.h) & \
-            (uvd[:, 2] > 0.)
+        # Do a np.isfinite check, otherwise vectorized > and < print
+        # annoying warnings if given nan or inf
+        isvalid = np.zeros(uvd.shape[0], dtype=bool)  # fill with false
+        isvalid[np.isfinite(uvd).all(axis=1)] = True
+        isvalid[isvalid] = (uvd[isvalid, 0] > 0.) & (uvd[isvalid, 0] < self.w) & \
+            (uvd[isvalid, 1] > 0.) & (uvd[isvalid, 1] < self.h) & \
+            (uvd[isvalid, 2] > 0.)
+
+        return isvalid
 
     def project(self, pt_c, compute_jacobians=None):
         """Project 3D point(s) in the sensor frame into (u,v,d) coordinates."""
