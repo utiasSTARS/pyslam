@@ -41,27 +41,43 @@ params = params_init
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
-options.min_cost_decrease = 0.99
+options.min_cost_decrease = 0.98
 # options.max_iters = 100
 # options.print_iter_summary = True
 
+# Disparity computation parameters
+window_size = 5
+min_disp = 1
+max_disp = np.max([16, np.int(64 * pyrfactor)]) + min_disp
+
+# Use semi-global block matching
+stereo = cv2.StereoSGBM_create(
+    minDisparity=min_disp,
+    numDisparities=max_disp - min_disp,
+    blockSize=window_size)
+
+# Use regular block matching
+# stereo = cv2.StereoBM_create(
+#     numDisparities=max_disp - min_disp, blockSize=window_size)
+
+disp = []
+for ims in dataset.gray:
+    d = stereo.compute(ims.left, ims.right)
+    disp.append(d.astype(float) / 16.)
+
+for i, d in enumerate(disp):
+    disp[i][d < min_disp + 1] = np.nan
+    disp[i][d > max_disp] = np.nan
+
+# Compute image jacobians
+im_jac = []
+for ims in dataset.gray:
+    gradx = cv2.Sobel(ims.left / 255., -1, 1, 0)
+    grady = cv2.Sobel(ims.left / 255., -1, 0, 1)
+    im_jac.append(np.array([gradx, grady]))
+
 for pyrlevel in pyrlevels:
     pyrfactor = 1. / 2.**pyrlevel
-
-    # Disparity computation parameters
-    window_size = 5
-    min_disp = 1
-    max_disp = np.max([16, np.int(64 * pyrfactor)]) + min_disp
-
-    # Use semi-global block matching
-    stereo = cv2.StereoSGBM_create(
-        minDisparity=min_disp,
-        numDisparities=max_disp - min_disp,
-        blockSize=window_size)
-
-    # Use regular block matching
-    # stereo = cv2.StereoBM_create(
-    #     numDisparities=max_disp - min_disp, blockSize=window_size)
 
     impairs = []
     for ims in dataset.gray:
@@ -71,25 +87,6 @@ for pyrlevel in pyrlevels:
             imL = cv2.pyrDown(imL)
             imR = cv2.pyrDown(imR)
         impairs.append([imL, imR])
-
-    disp = []
-    for ims in impairs:
-        d = stereo.compute(ims[0], ims[1])
-        disp.append(d.astype(float) / 16.)
-
-    for i, d in enumerate(disp):
-        disp[i][d < min_disp + 1] = np.nan
-        disp[i][d > max_disp] = np.nan
-
-    # Compute image jacobians
-    im_jac = []
-    for ims in impairs:
-        gradx = cv2.Sobel(ims[0], -1, 1, 0)
-        grady = cv2.Sobel(ims[0], -1, 0, 1)
-        # gradx = cv2.Scharr(ims[0], -1, 1, 0)
-        # grady = cv2.Scharr(ims[0], -1, 0, 1)
-        im_jac.append(np.array([gradx.astype(float) / 255.,
-                                grady.astype(float) / 255.]))
 
     # Create the camera
     fu = dataset.calib.K_cam0[0, 0] * pyrfactor
@@ -102,9 +99,9 @@ for pyrlevel in pyrlevels:
     camera = StereoCamera(cu, cv, fu, fv, b, w, h)
 
     # Create the cost function
-    im_ref = impairs[0][0].astype(float) / 255.
+    im_ref = impairs[0][0] / 255.
     disp_ref = disp[0]
-    im_track = impairs[1][0].astype(float) / 255.
+    im_track = impairs[1][0] / 255.
     jac_ref = im_jac[0]
     cost = PhotometricCost(camera, im_ref, disp_ref, jac_ref, im_track, 1.)
 
