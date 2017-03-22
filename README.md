@@ -5,7 +5,7 @@ Dependencies:
 * numpy (for most things)
 * scipy (for sparse linear algebra)
 * numba (for parallel vectorization speedups)
-* [liegroups](https://gitlab.com/utiasSTARS/liegroups)
+* [liegroups](https://github.com/utiasSTARS/liegroups)
 
 ### Installation
 To install, `cd` into the repository directory (the one with `setup.py`) and run:
