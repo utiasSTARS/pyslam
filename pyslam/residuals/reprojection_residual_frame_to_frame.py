@@ -1,7 +1,8 @@
 import numpy as np
 from liegroups import SE3
 
-class ReprojectionCostFrameToFrame:
+
+class ReprojectionResidualFrameToFrame:
     """Frame to frame reprojection error for any kind of camera."""
 
     def __init__(self, camera, obs_1, obs_2, stiffness):

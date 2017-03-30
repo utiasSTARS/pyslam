@@ -4,8 +4,9 @@ import numpy as np
 
 from liegroups import SE2, SO2
 
-from pyslam.costs import PoseCost, PoseToPoseCost
+from pyslam.residuals import PoseResidual, PoseToPoseResidual
 from pyslam.problem import Options, Problem
+from pyslam.utils import invsqrt
 
 T_1_0_true = SE2.identity()
 T_2_0_true = SE2(SO2.identity(), -np.array([0.5, 0]))
@@ -54,39 +55,39 @@ prior_stiffness = invsqrt(1e-12 * np.identity(3))
 odom_stiffness = invsqrt(1e-3 * np.identity(3))
 loop_stiffness = invsqrt(1. * np.identity(3))
 
-cost0 = PoseCost(T_1_0_obs, prior_stiffness)
-cost0_params = ['T_1_0']
+residual0 = PoseResidual(T_1_0_obs, prior_stiffness)
+residual0_params = ['T_1_0']
 
-cost1 = PoseToPoseCost(T_2_1_obs, odom_stiffness)
-cost1_params = ['T_1_0', 'T_2_0']
+residual1 = PoseToPoseResidual(T_2_1_obs, odom_stiffness)
+residual1_params = ['T_1_0', 'T_2_0']
 
-cost2 = PoseToPoseCost(T_3_2_obs, odom_stiffness)
-cost2_params = ['T_2_0', 'T_3_0']
+residual2 = PoseToPoseResidual(T_3_2_obs, odom_stiffness)
+residual2_params = ['T_2_0', 'T_3_0']
 
-cost3 = PoseToPoseCost(T_4_3_obs, odom_stiffness)
-cost3_params = ['T_3_0', 'T_4_0']
+residual3 = PoseToPoseResidual(T_4_3_obs, odom_stiffness)
+residual3_params = ['T_3_0', 'T_4_0']
 
-cost4 = PoseToPoseCost(T_5_4_obs, odom_stiffness)
-cost4_params = ['T_4_0', 'T_5_0']
+residual4 = PoseToPoseResidual(T_5_4_obs, odom_stiffness)
+residual4_params = ['T_4_0', 'T_5_0']
 
-cost5 = PoseToPoseCost(T_6_5_obs, odom_stiffness)
-cost5_params = ['T_5_0', 'T_6_0']
+residual5 = PoseToPoseResidual(T_6_5_obs, odom_stiffness)
+residual5_params = ['T_5_0', 'T_6_0']
 
-cost6 = PoseToPoseCost(T_6_2_obs, loop_stiffness)
-cost6_params = ['T_2_0', 'T_6_0']
+residual6 = PoseToPoseResidual(T_6_2_obs, loop_stiffness)
+residual6_params = ['T_2_0', 'T_6_0']
 
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
 
 problem = Problem(options)
-problem.add_residual_block(cost0, cost0_params)
-problem.add_residual_block(cost1, cost1_params)
-problem.add_residual_block(cost2, cost2_params)
-problem.add_residual_block(cost3, cost3_params)
-problem.add_residual_block(cost4, cost4_params)
-problem.add_residual_block(cost5, cost5_params)
-problem.add_residual_block(cost6, cost6_params)
+problem.add_residual_block(residual0, residual0_params)
+problem.add_residual_block(residual1, residual1_params)
+problem.add_residual_block(residual2, residual2_params)
+problem.add_residual_block(residual3, residual3_params)
+problem.add_residual_block(residual4, residual4_params)
+problem.add_residual_block(residual5, residual5_params)
+problem.add_residual_block(residual6, residual6_params)
 
 # problem.set_parameters_constant('T_1_0')
 # problem.set_parameters_constant('T_3_0')
@@ -100,12 +101,12 @@ params_true = {'T_1_0': T_1_0_true, 'T_2_0': T_2_0_true,
 
 problem.initialize_params(params_init)
 
-print("Initial Cost: %e\n" % problem.eval_cost())
+print("Initial Residual: %e\n" % problem.eval_cost())
 
 params_final = problem.solve()
 print()
 
-print("Final Cost: %e\n" % problem.eval_cost())
+print("Final Residual: %e\n" % problem.eval_cost())
 
 print("Initial Error:")
 for key in params_true.keys():

@@ -1,8 +1,8 @@
 import numpy as np
 
 
-class QuadraticCost:
-    """A simple quadratic cost for fitting a parabola to data."""
+class QuadraticResidual:
+    """A simple quadratic residual for fitting a parabola to data."""
 
     def __init__(self, x, y, stiffness):
         self.x = np.array([x])

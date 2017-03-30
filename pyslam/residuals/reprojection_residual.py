@@ -1,7 +1,8 @@
 import numpy as np
 from liegroups import SE3
 
-class ReprojectionCost:
+
+class ReprojectionResidual:
     """Reprojection error for any kind of camera."""
 
     def __init__(self, camera, obs, stiffness):

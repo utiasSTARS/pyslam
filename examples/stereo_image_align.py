@@ -7,7 +7,8 @@ import pykitti
 from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
-from pyslam.costs import PhotometricCost
+from pyslam.residuals import PhotometricResidual
+from pyslam.losses import HuberLoss
 import time
 
 # Load KITTI data
@@ -41,7 +42,7 @@ params = params_init
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
-options.min_cost_decrease = 0.99
+options.min_residual_decrease = 0.99
 # options.max_iters = 100
 # options.print_iter_summary = True
 
@@ -101,32 +102,33 @@ for pyrlevel in pyrlevels:
     h = impairs[0][0].shape[0]
     camera = StereoCamera(cu, cv, fu, fv, b, w, h)
 
-    # Create the cost function
+    # Create the residual function
     im_ref = impairs[0][0].astype(float) / 255.
     disp_ref = disp[0]
     im_track = impairs[1][0].astype(float) / 255.
     jac_ref = im_jac[0]
-    cost = PhotometricCost(camera, im_ref, disp_ref, jac_ref, im_track, 1.)
+    residual = PhotometricResidual(
+        camera, im_ref, disp_ref, jac_ref, im_track, 1.)
 
     # Timing debug
     # niters = 100
     # start = time.perf_counter()
     # for _ in range(niters):
-    #     cost.evaluate([params_init['T_1_0']])
+    #     residual.evaluate([params_init['T_1_0']])
     # end = time.perf_counter()
-    # print('cost.evaluate avg {} s', (end - start) / niters)
+    # print('residual.evaluate avg {} s', (end - start) / niters)
 
     # start = time.perf_counter()
     # for _ in range(niters):
-    #     cost.evaluate([params_init['T_1_0']], [True])
+    #     residual.evaluate([params_init['T_1_0']], [True])
     # end = time.perf_counter()
-    # print('cost.evaluate w jac avg {} s', (end - start) / niters)
+    # print('residual.evaluate w jac avg {} s', (end - start) / niters)
 
     # Optimize
     start = time.perf_counter()
 
     problem = Problem(options)
-    problem.add_residual_block(cost, ['T_1_0'])
+    problem.add_residual_block(residual, ['T_1_0'])
     problem.initialize_params(params)
     params = problem.solve()
 

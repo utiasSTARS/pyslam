@@ -1,7 +1,8 @@
 import numpy as np
 
-class PoseCost:
-    """Unary pose cost given absolute pose measurement in SE2/SE3."""
+
+class PoseResidual:
+    """Unary pose residual given absolute pose measurement in SE2/SE3."""
 
     def __init__(self, T_obs, stiffness):
         self.T_obs = T_obs

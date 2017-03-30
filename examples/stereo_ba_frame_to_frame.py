@@ -3,12 +3,13 @@ import numpy as np
 from liegroups import SE3
 
 from pyslam.sensors import StereoCamera
-from reprojection_cost_f2f import ReprojectionCostF2F
+from pyslam.residuals import ReprojectionResidualFrameToFrame
 from pyslam.problem import Options, Problem
 from pyslam.utils import invsqrt
 from collections import OrderedDict
 
-# This example performs frame-to-frame bundle adjustment, optimizing only for the relative poses (and not the 3D landmarks)
+# This example performs frame-to-frame bundle adjustment, optimizing only
+# for the relative poses (and not the 3D landmarks)
 
 # Reproducibility
 np.random.seed(42)
@@ -46,25 +47,27 @@ options.max_nondecreasing_steps = 3
 
 problem = Problem(options)
 
-# Collect observations in pairs of poses (i.e. 0-1, 1-2, 2-3) and add costs to problem
-for i in range(len(obs)-1):
+# Collect observations in pairs of poses (i.e. 0-1, 1-2, 2-3) and add
+# residuals to problem
+for i in range(len(obs) - 1):
     pose_1_obs = obs[i]
-    pose_2_obs = obs[i+1]
+    pose_2_obs = obs[i + 1]
     for j, o_1 in enumerate(pose_1_obs):
         o_2 = pose_2_obs[j]
-        cost = ReprojectionCostF2F(camera, o_1, o_2, obs_stiffness)
+        residual = ReprojectionResidualFrameToFrame(
+            camera, o_1, o_2, obs_stiffness)
         problem.add_residual_block(
-            cost, ['T_cam{}_cam{}'.format(i+1, i)])
+            residual, ['T_cam{}_cam{}'.format(i + 1, i)])
 
 params_true = OrderedDict({})
 params_init = OrderedDict({})
 
 # Initialize the relative SE(3) transforms
-for i in range(len(obs)-1):
+for i in range(len(obs) - 1):
     T_c1_w = T_cam_w_GT[i]
-    T_c2_w = T_cam_w_GT[i+1]
-    pid = 'T_cam{}_cam{}'.format(i+1, i)
-    params_true.update({pid: T_c2_w * T_c1_w.inv() })
+    T_c2_w = T_cam_w_GT[i + 1]
+    pid = 'T_cam{}_cam{}'.format(i + 1, i)
+    params_true.update({pid: T_c2_w * T_c1_w.inv()})
     params_init.update({pid: SE3.identity()})
 
 problem.initialize_params(params_init)

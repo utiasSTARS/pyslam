@@ -8,10 +8,10 @@ from pyslam.utils import invsqrt
 class TestBasic:
 
     def test_residual_blocks(self):
-        from pyslam.costs import QuadraticCost
+        from pyslam.residuals import QuadraticResidual
         problem = Problem()
         param_keys = ['a', 'b', 'c']
-        problem.add_residual_block(QuadraticCost(2., 4., 1.),
+        problem.add_residual_block(QuadraticResidual(2., 4., 1.),
                                    param_keys)
         assert param_keys == problem.block_param_keys[0]
 
@@ -41,21 +41,21 @@ class TestBasic:
         assert problem.constant_param_keys == []
 
     def test_eval_cost(self):
-        from pyslam.costs import QuadraticCost
+        from pyslam.residuals import QuadraticResidual
         problem = Problem()
         good_params = {'a': 1., 'b': 2., 'c': 1.}
         bad_params = {'a': 1., 'b': 0., 'c': 0.}
-        cost1 = QuadraticCost(1., 4., 0.5)
-        cost2 = QuadraticCost(0., 1., 2.)
-        problem.add_residual_block(cost1, ['a', 'b', 'c'])
-        problem.add_residual_block(cost2, ['a', 'b', 'c'])
+        residual1 = QuadraticResidual(1., 4., 0.5)
+        residual2 = QuadraticResidual(0., 1., 2.)
+        problem.add_residual_block(residual1, ['a', 'b', 'c'])
+        problem.add_residual_block(residual2, ['a', 'b', 'c'])
         problem.initialize_params(good_params)
         assert problem.eval_cost() == 0.
         assert problem.eval_cost(bad_params) == 0.5 * ((0.5 * 0.5 * 3. * 3.)
                                                        + (2. * 2. * 1. * 1.))
 
     def test_fit_quadratic(self):
-        from pyslam.costs import QuadraticCost
+        from pyslam.residuals import QuadraticResidual
 
         params_true = {'a': 1., 'b': -2., 'c': 3.}
         params_init = {'a': -20., 'b': 10., 'c': -30.}
@@ -66,7 +66,7 @@ class TestBasic:
 
         problem = Problem()
         for x, y in zip(x_data, y_data):
-            problem.add_residual_block(QuadraticCost(
+            problem.add_residual_block(QuadraticResidual(
                 x, y, 1.), ['a', 'b', 'c'])
 
         problem.initialize_params(params_init)
@@ -123,23 +123,23 @@ class TestPoseGraphRelax:
         return T_obs
 
     @pytest.fixture
-    def costs(self, odometry):
-        from pyslam.costs import PoseCost, PoseToPoseCost
+    def residuals(self, odometry):
+        from pyslam.residuals import PoseResidual, PoseToPoseResidual
         prior_stiffness = invsqrt(1e-12 * np.identity(3))
         odom_stiffness = invsqrt(1e-3 * np.identity(3))
         loop_stiffness = invsqrt(1. * np.identity(3))
         return [
-            PoseCost(odometry['T_0_w'], prior_stiffness),
-            PoseToPoseCost(odometry['T_1_0'], odom_stiffness),
-            PoseToPoseCost(odometry['T_2_1'], odom_stiffness),
-            PoseToPoseCost(odometry['T_3_2'], odom_stiffness),
-            PoseToPoseCost(odometry['T_4_3'], odom_stiffness),
-            PoseToPoseCost(odometry['T_5_4'], odom_stiffness),
-            PoseToPoseCost(odometry['T_5_1'], loop_stiffness)
+            PoseResidual(odometry['T_0_w'], prior_stiffness),
+            PoseToPoseResidual(odometry['T_1_0'], odom_stiffness),
+            PoseToPoseResidual(odometry['T_2_1'], odom_stiffness),
+            PoseToPoseResidual(odometry['T_3_2'], odom_stiffness),
+            PoseToPoseResidual(odometry['T_4_3'], odom_stiffness),
+            PoseToPoseResidual(odometry['T_5_4'], odom_stiffness),
+            PoseToPoseResidual(odometry['T_5_1'], loop_stiffness)
         ]
 
     @pytest.fixture
-    def cost_params(self):
+    def residual_params(self):
         return [
             ['T_0_w'],
             ['T_0_w', 'T_1_w'],
@@ -157,12 +157,12 @@ class TestPoseGraphRelax:
         options.max_nondecreasing_steps = 3
         return options
 
-    def test_first_pose_constant(self, options, costs, cost_params,
+    def test_first_pose_constant(self, options, residuals, residual_params,
                                  poses_init, poses_true):
         from liegroups import SE2
         problem = Problem(options)
         for i in range(1, 6):
-            problem.add_residual_block(costs[i], cost_params[i])
+            problem.add_residual_block(residuals[i], residual_params[i])
         problem.set_parameters_constant('T_0_w')
         problem.initialize_params(poses_init)
         poses_final = problem.solve()
@@ -170,24 +170,24 @@ class TestPoseGraphRelax:
             assert np.linalg.norm(
                 SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
 
-    def test_first_pose_prior(self, options, costs, cost_params,
+    def test_first_pose_prior(self, options, residuals, residual_params,
                               poses_init, poses_true):
         from liegroups import SE2
         problem = Problem(options)
         for i in range(0, 6):
-            problem.add_residual_block(costs[i], cost_params[i])
+            problem.add_residual_block(residuals[i], residual_params[i])
         problem.initialize_params(poses_init)
         poses_final = problem.solve()
         for key in poses_true.keys():
             assert np.linalg.norm(
                 SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
 
-    def test_loop_closure(self, options, costs, cost_params,
+    def test_loop_closure(self, options, residuals, residual_params,
                           poses_init, poses_true):
         from liegroups import SE2
         problem = Problem(options)
         for i in range(0, 7):
-            problem.add_residual_block(costs[i], cost_params[i])
+            problem.add_residual_block(residuals[i], residual_params[i])
         problem.initialize_params(poses_init)
         poses_final = problem.solve()
         for key in poses_true.keys():
@@ -235,7 +235,7 @@ class TestBundleAdjust:
 
     def test_bundle_adjust(self, options, camera, points, poses, observations):
         from liegroups import SE3
-        from pyslam.costs import ReprojectionCost
+        from pyslam.residuals import ReprojectionResidual
 
         problem = Problem(options)
 
@@ -244,9 +244,9 @@ class TestBundleAdjust:
 
         for i, this_pose_obs in enumerate(observations):
             for j, o in enumerate(this_pose_obs):
-                cost = ReprojectionCost(camera, o, obs_stiffness)
+                residual = ReprojectionResidual(camera, o, obs_stiffness)
                 problem.add_residual_block(
-                    cost, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
+                    residual, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
 
         params_true = {}
         params_init = {}
@@ -290,7 +290,7 @@ class TestCovariance:
 
     def test_se3(self, options):
         from liegroups import SE3
-        from pyslam.costs import PoseCost, PoseToPoseCost
+        from pyslam.residuals import PoseResidual, PoseToPoseResidual
 
         problem = Problem(options)
 
@@ -302,13 +302,13 @@ class TestCovariance:
         odom_covar = np.linalg.inv(np.dot(odom_stiffness, odom_stiffness))
         T0_covar = np.linalg.inv(np.dot(T0_stiffness, T0_stiffness))
 
-        cost0 = PoseCost(SE3.identity(), T0_stiffness)
-        cost1 = PoseToPoseCost(odom, odom_stiffness)
+        residual0 = PoseResidual(SE3.identity(), T0_stiffness)
+        residual1 = PoseToPoseResidual(odom, odom_stiffness)
 
         params_init = {'T0': SE3.identity(), 'T1': SE3.identity()}
 
-        problem.add_residual_block(cost0, 'T0')
-        problem.add_residual_block(cost1, ['T0', 'T1'])
+        problem.add_residual_block(residual0, 'T0')
+        problem.add_residual_block(residual1, ['T0', 'T1'])
         problem.initialize_params(params_init)
         problem.solve()
         problem.compute_covariance()

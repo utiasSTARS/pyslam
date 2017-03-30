@@ -1,7 +1,7 @@
 import numpy as np
 
-class PoseToPoseCost:
-    """Binary pose-to-pose cost given relative pose mesurement in SE2/SE3."""
+class PoseToPoseResidual:
+    """Binary pose-to-pose residual given relative pose mesurement in SE2/SE3."""
 
     def __init__(self, T_2_1_obs, stiffness):
         self.T_2_1_obs = T_2_1_obs

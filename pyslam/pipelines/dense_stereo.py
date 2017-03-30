@@ -6,7 +6,8 @@ import cv2
 from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
-from pyslam.costs import PhotometricCost
+from pyslam.residuals import PhotometricResidual
+from pyslam.losses import HuberLoss, L2Loss
 from pyslam.utils import invsqrt
 
 
@@ -79,10 +80,10 @@ class DenseStereoPipeline:
         # Default optimizer parameters
         self.problem_options.allow_nondecreasing_steps = True
         self.problem_options.max_nondecreasing_steps = 3
-        self.problem_options.min_cost_decrease = 0.98
+        self.problem_options.min_residual_decrease = 0.98
 
         # Number of image pyramid levels for coarse-to-fine optimization
-        self.pyrlevels = 4
+        self.pyrlevels = 5
 
     def track(self, im_left, im_right):
         if len(self.keyframes) is 0:
@@ -120,11 +121,11 @@ class DenseStereoPipeline:
             pyr_camera.w = im_ref.shape[1]
             pyr_camera.h = im_ref.shape[0]
 
-            cost = PhotometricCost(
-                pyr_camera, im_ref, disp_ref, jac_ref, im_track, 1.)
+            residual = PhotometricResidual(
+                pyr_camera, im_ref, disp_ref, jac_ref, im_track, 1., L2Loss())
 
             problem = Problem(self.problem_options)
-            problem.add_residual_block(cost, ['T_1_0'])
+            problem.add_residual_block(residual, ['T_1_0'])
             problem.initialize_params(params)
             params = problem.solve()
 

@@ -104,7 +104,7 @@ class Problem:
         if param_dict is None:
             param_dict = self.param_dict
 
-        cost = 0
+        cost = 0.
         for block, keys in zip(self.residual_blocks, self.block_param_keys):
             try:
                 params = [param_dict[key] for key in keys]

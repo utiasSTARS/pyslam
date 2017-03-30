@@ -6,6 +6,7 @@ import pykitti
 from liegroups import SE3
 from pyslam.pipelines import DenseStereoPipeline
 from pyslam.sensors import StereoCamera
+
 import time
 
 # Load KITTI data

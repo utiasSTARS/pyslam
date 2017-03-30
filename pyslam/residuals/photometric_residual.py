@@ -4,17 +4,21 @@ import time
 from liegroups import SE3
 
 from pyslam.utils import bilinear_interpolate, stackmul
+from pyslam.losses import L2Loss
 
 
-class PhotometricCost:
-    """Photometric cost for greyscale images.
+class PhotometricResidual:
+    """Photometric residual for greyscale images.
     Uses the pre-computed reference image jacobian as an approximation to the
     tracking image jacobian under the assumption that the camera motion is small."""
 
-    def __init__(self, camera, im_ref, disp_ref, jac_ref, im_track, stiffness):
+    def __init__(self, camera, im_ref, disp_ref, jac_ref,
+                 im_track, stiffness, loss=L2Loss()):
         self.camera = camera
-        self.stiffness = stiffness
         self.im_track = im_track
+
+        self.stiffness = stiffness
+        self.loss = loss
 
         self.im_ref = im_ref.flatten()
 
@@ -75,6 +79,10 @@ class PhotometricCost:
             self.im_track, uvd_track[:, 0], uvd_track[:, 1])
         residual = self.stiffness * (im_ref_est - im_ref_true)
 
+        # Apply chosen loss function
+        loss_stiffness = 1. / np.sqrt(self.loss.weight(residual))
+        residual = loss_stiffness * residual
+
         # DEBUG: Rebuild residual and disparity images
         # self._rebuild_images(residual, im_ref_est, im_ref_true, valid_track)
 
@@ -84,9 +92,12 @@ class PhotometricCost:
 
             if compute_jacobians[0]:
                 jacobians[0] = np.empty([im_jac.shape[0], 1, 6])
-                temp = np.empty([im_jac.shape[0], 1, 3])
+
+                # transposes needed for proper broadcasting
+                im_jac = (self.stiffness * loss_stiffness.T * im_jac.T).T
                 im_jac = np.expand_dims(im_jac, axis=1)
 
+                temp = np.empty([im_jac.shape[0], 1, 3])
                 stackmul(im_jac, project_jac[:, 0:2, :], temp)
 
                 odot_pt_track = SE3.odot(pt_track)

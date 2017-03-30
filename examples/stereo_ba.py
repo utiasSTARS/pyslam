@@ -3,7 +3,7 @@ import numpy as np
 from liegroups import SE3
 
 from pyslam.sensors import StereoCamera
-from pyslam.costs import ReprojectionCost
+from pyslam.residuals import ReprojectionResidual
 from pyslam.problem import Options, Problem
 from pyslam.utils import invsqrt
 
@@ -44,9 +44,9 @@ problem = Problem(options)
 
 for i, this_pose_obs in enumerate(obs):
     for j, o in enumerate(this_pose_obs):
-        cost = ReprojectionCost(camera, o, obs_stiffness)
+        residual = ReprojectionResidual(camera, o, obs_stiffness)
         problem.add_residual_block(
-            cost, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
+            residual, ['T_cam{}_w'.format(i), 'pt{}_w'.format(j)])
 
 params_true = {}
 params_init = {}
