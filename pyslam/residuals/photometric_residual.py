@@ -80,7 +80,7 @@ class PhotometricResidual:
         residual = self.stiffness * (im_ref_est - im_ref_true)
 
         # Apply chosen loss function
-        loss_stiffness = 1. / np.sqrt(self.loss.weight(residual))
+        loss_stiffness = self.loss.stiffness(residual)
         residual = loss_stiffness * residual
 
         # DEBUG: Rebuild residual and disparity images
@@ -94,7 +94,7 @@ class PhotometricResidual:
                 jacobians[0] = np.empty([im_jac.shape[0], 1, 6])
 
                 # transposes needed for proper broadcasting
-                im_jac = (self.stiffness * loss_stiffness.T * im_jac.T).T
+                im_jac = (loss_stiffness.T * self.stiffness * im_jac.T).T
                 im_jac = np.expand_dims(im_jac, axis=1)
 
                 temp = np.empty([im_jac.shape[0], 1, 3])

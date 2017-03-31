@@ -23,11 +23,13 @@ dataset.load_gray(format='cv2')
 dataset.load_oxts()
 
 # Parameters to estimate
-T_0_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
-    np.linalg.inv(dataset.oxts[0].T_w_imu)))
-T_1_w = SE3.from_matrix(dataset.calib.T_cam0_imu.dot(
-    np.linalg.inv(dataset.oxts[1].T_w_imu)))
+T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)
+T_cam0_imu.normalize()
+T_0_w = T_cam0_imu * \
+    SE3.from_matrix(dataset.oxts[0].T_w_imu).inv()
 T_0_w.normalize()
+T_1_w = T_cam0_imu * \
+    SE3.from_matrix(dataset.oxts[1].T_w_imu).inv()
 T_1_w.normalize()
 T_1_0_true = T_1_w * T_0_w.inv()
 
@@ -42,12 +44,12 @@ params = params_init
 options = Options()
 options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
-options.min_residual_decrease = 0.99
+options.min_cost_decrease = 0.99
 # options.max_iters = 100
 # options.print_iter_summary = True
 
 for pyrlevel in pyrlevels:
-    pyrfactor = 1. / 2.**pyrlevel
+    pyrfactor = 1. / 2**pyrlevel
 
     # Disparity computation parameters
     window_size = 5
@@ -102,7 +104,7 @@ for pyrlevel in pyrlevels:
     h = impairs[0][0].shape[0]
     camera = StereoCamera(cu, cv, fu, fv, b, w, h)
 
-    # Create the residual function
+    # Create the cost function
     im_ref = impairs[0][0].astype(float) / 255.
     disp_ref = disp[0]
     im_track = impairs[1][0].astype(float) / 255.
@@ -114,26 +116,26 @@ for pyrlevel in pyrlevels:
     # niters = 100
     # start = time.perf_counter()
     # for _ in range(niters):
-    #     residual.evaluate([params_init['T_1_0']])
+    #     cost.evaluate([params_init['T_1_0']])
     # end = time.perf_counter()
-    # print('residual.evaluate avg {} s', (end - start) / niters)
+    # print('cost.evaluate avg {} s', (end - start) / niters)
 
     # start = time.perf_counter()
     # for _ in range(niters):
-    #     residual.evaluate([params_init['T_1_0']], [True])
+    #     cost.evaluate([params_init['T_1_0']], [True])
     # end = time.perf_counter()
-    # print('residual.evaluate w jac avg {} s', (end - start) / niters)
+    # print('cost.evaluate w jac avg {} s', (end - start) / niters)
 
     # Optimize
-    start = time.perf_counter()
+    # start = time.perf_counter()
 
     problem = Problem(options)
     problem.add_residual_block(residual, ['T_1_0'])
     problem.initialize_params(params)
     params = problem.solve()
 
-    end = time.perf_counter()
-    print('Elapsed time: {} s'.format(end - start))
+    # end = time.perf_counter()
+    # print('Elapsed time: {} s'.format(end - start))
 
-    print('Error in T_1_0: {}'.format(
-        SE3.log(T_1_0_true * params['T_1_0'].inv())))
+print('Error in T_1_w: {}'.format(
+    SE3.log(T_1_w * (params['T_1_0'] * T_0_w).inv())))

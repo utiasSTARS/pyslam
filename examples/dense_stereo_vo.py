@@ -13,7 +13,7 @@ import time
 basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
-frame_range = range(0, 50)
+frame_range = range(0, 30)
 
 dataset = pykitti.raw(basedir, date, drive, frame_range)
 dataset.load_calib()
@@ -22,8 +22,10 @@ dataset.load_oxts()
 
 # Parameters to estimate
 T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)
+T_cam0_imu.normalize()
 T_0_w = T_cam0_imu * \
     SE3.from_matrix(dataset.oxts[0].T_w_imu).inv()
+T_0_w.normalize()
 
 # Create the camera
 fu = dataset.calib.K_cam0[0, 0]
