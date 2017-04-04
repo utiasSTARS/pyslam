@@ -24,11 +24,12 @@ class PhotometricResidual:
 
         u, v = np.meshgrid(list(range(0, camera.w)),
                            list(range(0, camera.h)), indexing='xy')
-        self.uvd_ref = np.array(
+
+        self.uvd_ref = np.vstack(
             [u.flatten(), v.flatten(), disp_ref.flatten()]).T
 
-        self.jac_ref = np.array([jac_ref[0, :, :].flatten(),
-                                 jac_ref[1, :, :].flatten()]).T
+        self.jac_ref = np.vstack([jac_ref[0, :, :].flatten(),
+                                  jac_ref[1, :, :].flatten()]).T
 
         # Filter out invalid pixels (NaN or negative disparity)
         valid_pixels = self.camera.is_valid_measurement(self.uvd_ref)
@@ -38,7 +39,7 @@ class PhotometricResidual:
 
         # Filter out pixels with weak gradients
         grad_ref = np.sum(self.jac_ref**2, axis=1)
-        strong_pixels = grad_ref >= 0.5**2
+        strong_pixels = grad_ref >= 0.25**2
         self.uvd_ref = self.uvd_ref[strong_pixels, :]
         self.im_ref = self.im_ref[strong_pixels]
         self.jac_ref = self.jac_ref[strong_pixels, :]
@@ -80,11 +81,13 @@ class PhotometricResidual:
         residual = self.stiffness * (im_ref_est - im_ref_true)
 
         # Apply chosen loss function
-        loss_stiffness = self.loss.stiffness(residual)
-        residual = loss_stiffness * residual
+        loss_weight = np.sqrt(self.loss.weight(residual))
+        residual = loss_weight * residual
 
         # DEBUG: Rebuild residual and disparity images
         # self._rebuild_images(residual, im_ref_est, im_ref_true, valid_track)
+        # import ipdb
+        # ipdb.set_trace()
 
         # Jacobian time!
         if compute_jacobians:
@@ -94,7 +97,7 @@ class PhotometricResidual:
                 jacobians[0] = np.empty([im_jac.shape[0], 1, 6])
 
                 # transposes needed for proper broadcasting
-                im_jac = (loss_stiffness.T * self.stiffness * im_jac.T).T
+                im_jac = (loss_weight.T * self.stiffness * im_jac.T).T
                 im_jac = np.expand_dims(im_jac, axis=1)
 
                 temp = np.empty([im_jac.shape[0], 1, 3])

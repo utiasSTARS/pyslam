@@ -13,7 +13,7 @@ import time
 basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
-frame_range = range(0, 30)
+frame_range = range(0, 50)
 
 dataset = pykitti.raw(basedir, date, drive, frame_range)
 dataset.load_calib()
@@ -39,9 +39,12 @@ camera = StereoCamera(cu, cv, fu, fv, b, w, h)
 
 # Pipeline
 vo = DenseStereoPipeline(camera, first_pose=T_0_w)
-vo.problem_options.print_summary = False
+vo.problem_options.print_summary = True
 
+errs = np.empty([len(frame_range), 6])
 for c_idx, f_idx in enumerate(frame_range):
+    print('Image {}'.format(f_idx))
+
     start = time.perf_counter()
 
     vo.track(dataset.gray[c_idx].left, dataset.gray[c_idx].right)
@@ -51,5 +54,15 @@ for c_idx, f_idx in enumerate(frame_range):
 
     T_c_w_GT = T_cam0_imu * SE3.from_matrix(dataset.oxts[c_idx].T_w_imu).inv()
     T_c_w_est = vo.keyframes[c_idx].T_c_w
-    print('Error in T_{}_w: {}'.format(f_idx,
-                                       SE3.log(T_c_w_GT * T_c_w_est.inv())))
+
+    errs[c_idx, :] = SE3.log(T_c_w_GT * T_c_w_est.inv())
+
+
+plt.plot(errs[:, 0], label='x')
+plt.plot(errs[:, 1], label='y')
+plt.plot(errs[:, 2], label='z')
+plt.plot(errs[:, 3], label=r'$\theta_x$')
+plt.plot(errs[:, 4], label=r'$\theta_y$')
+plt.plot(errs[:, 5], label=r'$\theta_z$')
+plt.legend()
+plt.show()

@@ -21,8 +21,8 @@ class DenseKeyframe:
         self.T_c_w = T_c_w
         self.T_c_w_covar = T_c_w_covar
 
-        for level in range(pyrlevels):
-            if level == 0:
+        for pyrlevel in range(pyrlevels):
+            if pyrlevel == 0:
                 pyr_left = [im_left]
                 pyr_right = [im_right]
             else:
@@ -33,33 +33,38 @@ class DenseKeyframe:
 
         if compute_disp:
             self.disparity = []
+            stereo = cv2.StereoBM_create()
+            # stereo = cv2.StereoSGBM_create(minDisparity=0,
+            #                                numDisparities=64,
+            #                                blockSize=11)
 
-            for level, imL, imR in zip(range(pyrlevels), pyr_left, pyr_right):
-                pyrfactor = 1. / 2**level
+            # Method 1: Compute disparity at full resolution and downsample
+            disp = stereo.compute(im_left, im_right).astype(float) / 16.
+            disp[disp < 0] = np.nan
 
-                window_size = 5
-                min_disp = 1
-                max_disp = np.max([16, np.int(64 * pyrfactor)]) + min_disp
+            for pyrlevel in range(pyrlevels):
+                if pyrlevel == 0:
+                    self.disparity = [disp]
+                else:
+                    pyrfactor = 2**-pyrlevel
+                    # disp = cv2.pyrDown(disp) # Applies a large Gaussian blur
+                    # kernel!
+                    disp = disp[0::2, 0::2]
+                    self.disparity.append(disp * pyrfactor)
 
-                stereo = cv2.StereoSGBM_create(
-                    minDisparity=min_disp,
-                    numDisparities=max_disp - min_disp,
-                    blockSize=window_size)
-                # stereo = cv2.StereoBM_create(
-                # numDisparities=max_disp - min_disp, blockSize=window_size)
-
-                disp = stereo.compute(imL, imR).astype(float) / 16.
-                disp[disp < min_disp + 1] = np.nan
-                disp[disp > max_disp] = np.nan
-                self.disparity.append(disp)
+            # Method 2: Compute disparity on downsampled images
+            # for level, imL, imR in zip(range(pyrlevels), pyr_left, pyr_right):
+            #     disp = stereo.compute(imL, imR).astype(float) / 16.
+            #     disp[disp <= 0] = np.nan
+            #     self.disparity.append(disp)
 
         if compute_jac:
             self.jacobian = []
-            for imL in pyr_left:
-                gradx = cv2.Sobel(imL, -1, 1, 0)
-                grady = cv2.Sobel(imL, -1, 0, 1)
-                self.jacobian.append(np.array([gradx.astype(float) / 255.,
-                                               grady.astype(float) / 255.]))
+
+            for im in self.image:
+                gradx = 0.5 * cv2.Sobel(im, -1, 1, 0)
+                grady = 0.5 * cv2.Sobel(im, -1, 0, 1)
+                self.jacobian.append(np.array([gradx, grady]))
 
 
 class DenseStereoPipeline:
@@ -80,11 +85,12 @@ class DenseStereoPipeline:
 
         # Default optimizer parameters
         self.problem_options.allow_nondecreasing_steps = True
-        self.problem_options.max_nondecreasing_steps = 3
+        self.problem_options.max_nondecreasing_steps = 5
         self.problem_options.min_cost_decrease = 0.99
+        self.problem_options.max_iters = 40
 
         # Number of image pyramid levels for coarse-to-fine optimization
-        self.pyrlevels = 4
+        self.pyrlevels = 6
 
     def track(self, im_left, im_right):
         if len(self.keyframes) is 0:
@@ -108,8 +114,12 @@ class DenseStereoPipeline:
         pyrlevel_sequence = list(range(self.pyrlevels))
         pyrlevel_sequence.reverse()
 
+        stiffness = 1. / 0.05
+        # loss = L2Loss()
+        loss = HuberLoss(1.345)
+
         for pyrlevel in pyrlevel_sequence[:-1]:
-            pyrfactor = 1. / 2.**pyrlevel
+            pyrfactor = 2**-pyrlevel
 
             im_ref = ref_frame.image[pyrlevel]
             disp_ref = ref_frame.disparity[pyrlevel]
@@ -126,7 +136,10 @@ class DenseStereoPipeline:
 
             residual = PhotometricResidual(
                 pyr_camera, im_ref, disp_ref, jac_ref, im_track,
-                1., L2Loss())
+                stiffness, loss)
+
+            # import ipdb
+            # ipdb.set_trace()
 
             problem = Problem(self.problem_options)
             problem.add_residual_block(residual, ['T_1_0'])

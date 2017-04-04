@@ -12,9 +12,6 @@ class L2Loss:
     def weight(self, x):
         return np.ones(x.size)
 
-    def stiffness(self, x):
-        return 1. / np.sqrt(self.weight(x))
-
 
 class L1Loss:
 
@@ -31,9 +28,6 @@ class L1Loss:
         wght[np.abs(x) < 0.1] = np.nan
         return wght
 
-    def stiffness(self, x):
-        return 1. / np.sqrt(self.weight(x))
-
 
 class CauchyLoss:
 
@@ -48,9 +42,6 @@ class CauchyLoss:
 
     def weight(self, x):
         return 1 / (1 + (x / self.k)**2)
-
-    def stiffness(self, x):
-        return 1. / np.sqrt(self.weight(x))
 
 
 class HuberLoss:
@@ -78,9 +69,6 @@ class HuberLoss:
         wght = np.zeros(x.size)
         leq_mask = np.abs(x) <= self.k
         ge_mask = np.abs(x) > self.k
-        wght[leq_mask] = np.ones(x[leq_mask].size)
+        wght[leq_mask] = 1.
         wght[ge_mask] = self.k / np.abs(x[ge_mask])
         return wght
-
-    def stiffness(self, x):
-        return 1. / np.sqrt(self.weight(x))
