@@ -13,12 +13,11 @@ class PhotometricResidual:
     tracking image jacobian under the assumption that the camera motion is small."""
 
     def __init__(self, camera, im_ref, disp_ref, jac_ref,
-                 im_track, stiffness, loss=L2Loss()):
+                 im_track, stiffness):
         self.camera = camera
         self.im_track = im_track
 
         self.stiffness = stiffness
-        self.loss = loss
 
         self.im_ref = im_ref.flatten()
 
@@ -80,10 +79,6 @@ class PhotometricResidual:
             self.im_track, uvd_track[:, 0], uvd_track[:, 1])
         residual = self.stiffness * (im_ref_est - im_ref_true)
 
-        # Apply chosen loss function
-        loss_weight = np.sqrt(self.loss.weight(residual))
-        residual = loss_weight * residual
-
         # DEBUG: Rebuild residual and disparity images
         # self._rebuild_images(residual, im_ref_est, im_ref_true, valid_track)
         # import ipdb
@@ -95,9 +90,7 @@ class PhotometricResidual:
 
             if compute_jacobians[0]:
                 jacobians[0] = np.empty([im_jac.shape[0], 1, 6])
-
-                # transposes needed for proper broadcasting
-                im_jac = (loss_weight.T * self.stiffness * im_jac.T).T
+                im_jac = self.stiffness * im_jac
                 im_jac = np.expand_dims(im_jac, axis=1)
 
                 temp = np.empty([im_jac.shape[0], 1, 3])

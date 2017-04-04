@@ -5,6 +5,8 @@ import numpy as np
 import scipy.sparse as sparse
 import scipy.sparse.linalg as splinalg
 
+from pyslam.losses import L2Loss
+
 
 class Options:
     """Class for specifying optimization options."""
@@ -51,6 +53,8 @@ class Problem:
         """List of residual blocks."""
         self.block_param_keys = []
         """List of parameter keys in param_dict that each block depends on."""
+        self.block_loss_functions = []
+        """List of loss functions applied to each block. Default: L2Loss."""
 
         self.constant_param_keys = []
         """List of parameter keys in param_dict to be held constant."""
@@ -62,7 +66,7 @@ class Problem:
         self._cost_history = []
         """History of cost values at each iteration of solve."""
 
-    def add_residual_block(self, block, param_keys):
+    def add_residual_block(self, block, param_keys, loss=L2Loss()):
         """Add a cost block to the problem."""
         # param_keys must be a list, but don't force the user to create a
         # 1-element list
@@ -71,6 +75,7 @@ class Problem:
 
         self.residual_blocks.append(block)
         self.block_param_keys.append(param_keys)
+        self.block_loss_functions.append(loss)
 
     def initialize_params(self, param_dict):
         """Initialize the parameters in the problem."""
@@ -105,7 +110,9 @@ class Problem:
             param_dict = self.param_dict
 
         cost = 0.
-        for block, keys in zip(self.residual_blocks, self.block_param_keys):
+        for block, keys, loss in zip(self.residual_blocks,
+                                     self.block_param_keys,
+                                     self.block_loss_functions):
             try:
                 params = [param_dict[key] for key in keys]
             except KeyError as e:
@@ -113,9 +120,9 @@ class Problem:
                     "Parameter {} has not been initialized".format(e.args[0]))
 
             residual = block.evaluate(params)
-            cost += np.dot(residual, residual)
+            cost += np.sum(loss.loss(residual))
 
-        return 0.5 * cost
+        return cost
 
     def solve(self):
         """Solve the problem using Gauss - Newton."""
@@ -134,7 +141,8 @@ class Problem:
 
             prev_cost = self._cost_history[-1]
 
-            if self.options.allow_nondecreasing_steps and nondecreasing_steps_taken == 0:
+            if self.options.allow_nondecreasing_steps and \
+                    nondecreasing_steps_taken == 0:
                 best_params = copy.deepcopy(self.param_dict)
 
             dx = self.solve_one_iter()
@@ -299,7 +307,9 @@ class Problem:
                                    list(range(len(self.param_dict)))))
 
         block_ridx = 0
-        for block, keys in zip(self.residual_blocks, self.block_param_keys):
+        for block, keys, loss in zip(self.residual_blocks,
+                                     self.block_param_keys,
+                                     self.block_loss_functions):
             params = [self.param_dict[key] for key in keys]
             compute_jacobians = [False if key in self.constant_param_keys
                                  else True for key in keys]
@@ -308,14 +318,17 @@ class Problem:
             # being held constant
             if any(compute_jacobians):
                 residual, jacobians = block.evaluate(params, compute_jacobians)
+                # Weight for iteratively reweighted least squares
+                loss_weight = np.sqrt(loss.weight(residual))
 
                 for key, jac in zip(keys, jacobians):
                     if jac is not None:
                         block_cidx = block_cidx_dict[key]
-                        H_blocks[block_ridx][
-                            block_cidx] = sparse.csr_matrix(jac)
+                        # transposes needed for proper broadcasting
+                        H_blocks[block_ridx][block_cidx] = \
+                            sparse.csr_matrix((loss_weight.T * jac.T).T)
 
-                e_blocks[block_ridx] = residual
+                e_blocks[block_ridx] = loss_weight * residual
 
             block_ridx += 1
 
@@ -324,6 +337,9 @@ class Problem:
 
         precision = H.T.dot(H)
         information = -H.T.dot(e)
+
+        # import ipdb
+        # ipdb.set_trace()
 
         return precision, information
 

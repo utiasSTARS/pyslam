@@ -117,6 +117,7 @@ class DenseStereoPipeline:
         stiffness = 1. / 0.05
         # loss = L2Loss()
         loss = HuberLoss(1.345)
+        # loss = HuberLoss(0.05)
 
         for pyrlevel in pyrlevel_sequence[:-1]:
             pyrfactor = 2**-pyrlevel
@@ -136,13 +137,13 @@ class DenseStereoPipeline:
 
             residual = PhotometricResidual(
                 pyr_camera, im_ref, disp_ref, jac_ref, im_track,
-                stiffness, loss)
+                stiffness)
 
             # import ipdb
             # ipdb.set_trace()
 
             problem = Problem(self.problem_options)
-            problem.add_residual_block(residual, ['T_1_0'])
+            problem.add_residual_block(residual, ['T_1_0'], loss=loss)
             problem.initialize_params(params)
             params = problem.solve()
 
