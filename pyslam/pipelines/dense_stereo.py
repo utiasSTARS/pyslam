@@ -14,72 +14,66 @@ from pyslam.utils import invsqrt
 class DenseKeyframe:
     """Dense keyframe"""
 
-    def __init__(self, im_left, im_right, pyrlevels=0,
-                 T_c_w=SE3.identity(), T_c_w_covar=np.identity(6),
-                 compute_disp=False, compute_jac=False):
+    def __init__(self, im_left, im_right, pyrlevels=0, T_c_w=SE3.identity()):
+        self.im_left = im_left
+        self.im_right = im_right
         self.pyrlevels = pyrlevels
         self.T_c_w = T_c_w
-        self.T_c_w_covar = T_c_w_covar
 
-        for pyrlevel in range(pyrlevels):
+        # Compute image pyramid
+        for pyrlevel in range(self.pyrlevels):
             if pyrlevel == 0:
                 pyr_left = [im_left]
-                pyr_right = [im_right]
+                # pyr_right = [im_right]
             else:
                 pyr_left.append(cv2.pyrDown(pyr_left[-1]))
-                pyr_right.append(cv2.pyrDown(pyr_right[-1]))
+                # pyr_right.append(cv2.pyrDown(pyr_right[-1]))
 
-        self.image = [im.astype(float) / 255. for im in pyr_left]
+        self.im_pyr = [im.astype(float) / 255. for im in pyr_left]
 
-        if compute_disp:
-            self.disparity = []
-            stereo = cv2.StereoBM_create()
-            # stereo = cv2.StereoSGBM_create(minDisparity=0,
-            #                                numDisparities=64,
-            #                                blockSize=11)
+    def compute_jacobian(self):
+        self.jacobian = []
+        for im in self.im_pyr:
+            gradx = 0.5 * cv2.Sobel(im, -1, 1, 0)
+            grady = 0.5 * cv2.Sobel(im, -1, 0, 1)
+            self.jacobian.append(np.array([gradx, grady]))
 
-            # Method 1: Compute disparity at full resolution and downsample
-            disp = stereo.compute(im_left, im_right).astype(float) / 16.
-            disp[disp < 0] = np.nan
+    def compute_disparity(self):
+        self.disparity = []
+        stereo = cv2.StereoBM_create()
+        # stereo = cv2.StereoSGBM_create(minDisparity=0,
+        #                                numDisparities=64,
+        #                                blockSize=11)
 
-            for pyrlevel in range(pyrlevels):
-                if pyrlevel == 0:
-                    self.disparity = [disp]
-                else:
-                    pyrfactor = 2**-pyrlevel
-                    # disp = cv2.pyrDown(disp) # Applies a large Gaussian blur
-                    # kernel!
-                    disp = disp[0::2, 0::2]
-                    self.disparity.append(disp * pyrfactor)
+        # Compute disparity at full resolution and downsample
+        disp = stereo.compute(self.im_left, self.im_right).astype(float) / 16.
+        disp[disp < 0] = np.nan
 
-            # Method 2: Compute disparity on downsampled images
-            # for level, imL, imR in zip(range(pyrlevels), pyr_left, pyr_right):
-            #     disp = stereo.compute(imL, imR).astype(float) / 16.
-            #     disp[disp <= 0] = np.nan
-            #     self.disparity.append(disp)
+        for pyrlevel in range(self.pyrlevels):
+            if pyrlevel == 0:
+                self.disparity = [disp]
+            else:
+                pyrfactor = 2**-pyrlevel
+                # disp = cv2.pyrDown(disp) # Applies a large Gaussian blur
+                # kernel!
+                disp = disp[0::2, 0::2]
+                self.disparity.append(disp * pyrfactor)
 
-        if compute_jac:
-            self.jacobian = []
-
-            for im in self.image:
-                gradx = 0.5 * cv2.Sobel(im, -1, 1, 0)
-                grady = 0.5 * cv2.Sobel(im, -1, 0, 1)
-                self.jacobian.append(np.array([gradx, grady]))
+    def compute_jacobian_and_disparity(self):
+        self.compute_jacobian()
+        self.compute_disparity()
 
 
 class DenseStereoPipeline:
     """Dense stereo VO pipeline"""
 
-    def __init__(self, camera, first_pose=SE3.identity(),
-                 first_pose_covar=1e-6 * np.identity(6)):
+    def __init__(self, camera, first_pose=SE3.identity()):
         self.camera = camera
         """Camera model"""
-        self.first_pose = first_pose
-        """First pose (transformation from world frame to camera frame)"""
-        self.first_pose_covar = first_pose_covar
-        """Covariance matrix of first pose"""
         self.keyframes = []
         """List of keyframes"""
+        self.T_c_w = [first_pose]
+        """List of camera poses"""
         self.problem_options = Options()
         """Optimizer parameters"""
 
@@ -87,45 +81,64 @@ class DenseStereoPipeline:
         self.problem_options.allow_nondecreasing_steps = True
         self.problem_options.max_nondecreasing_steps = 5
         self.problem_options.min_cost_decrease = 0.99
-        self.problem_options.max_iters = 40
+        self.problem_options.max_iters = 30
 
         # Number of image pyramid levels for coarse-to-fine optimization
         self.pyrlevels = 6
 
     def track(self, im_left, im_right):
-        if len(self.keyframes) is 0:
+        # import ipdb
+        # ipdb.set_trace()
+        if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
             trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels,
-                                       self.first_pose, self.first_pose_covar,
-                                       compute_disp=True, compute_jac=True)
+                                       self.T_c_w[0])
+            trackframe.compute_jacobian_and_disparity()
+            self.keyframes.append(trackframe)
         else:
             # Default behaviour for second frame and beyond
-            trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels,
-                                       compute_disp=True, compute_jac=True)
-            T_1_0 = self._compute_frame_to_frame_motion(
-                self.keyframes[-1], trackframe)
-            trackframe.T_c_w = T_1_0 * self.keyframes[-1].T_c_w
+            trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels)
 
-        self.keyframes.append(trackframe)
+            guess = self.T_c_w[-1] * self.keyframes[-1].T_c_w.inv()
+            print('guess = \n{}'.format(SE3.log(guess)))
+            T_track_ref = self._compute_frame_to_frame_motion(
+                self.keyframes[-1], trackframe, guess)
+            print('est = \n{}'.format(SE3.log(T_track_ref)))
 
-    def _compute_frame_to_frame_motion(self, ref_frame, track_frame):
-        params = {'T_1_0': SE3.identity()}
+            self.T_c_w.append(T_track_ref * self.keyframes[-1].T_c_w)
+
+            # Threshold the distance from the active keyframe to drop a new one
+            se3_vec = SE3.log(T_track_ref)
+            trans_dist = np.linalg.norm(se3_vec[0:3])
+            rot_dist = np.linalg.norm(se3_vec[3:6])
+            print('trans_dist = {}, rot_dist = {}'.format(trans_dist, rot_dist))
+            if trans_dist > 2 or rot_dist > 0.2:
+                trackframe.T_c_w = self.T_c_w[-1]
+                trackframe.T_c_w.normalize()  # Numerical instability problems otherwise
+                trackframe.compute_jacobian_and_disparity()
+                self.keyframes.append(trackframe)
+                print('Dropped new keyframe. Now have {}.'.format(
+                    len(self.keyframes)))
+
+    def _compute_frame_to_frame_motion(self, ref_frame, track_frame,
+                                       guess=SE3.identity()):
+        params = {'T_1_0': guess}
 
         pyrlevel_sequence = list(range(self.pyrlevels))
         pyrlevel_sequence.reverse()
 
-        stiffness = 1. / 0.05
+        stiffness = 1. / 0.1
         # loss = L2Loss()
-        loss = HuberLoss(1.345)
-        # loss = HuberLoss(0.05)
+        # loss = HuberLoss(1.345)
+        loss = HuberLoss(0.1)
 
         for pyrlevel in pyrlevel_sequence[:-1]:
             pyrfactor = 2**-pyrlevel
 
-            im_ref = ref_frame.image[pyrlevel]
+            im_ref = ref_frame.im_pyr[pyrlevel]
             disp_ref = ref_frame.disparity[pyrlevel]
             jac_ref = ref_frame.jacobian[pyrlevel]
-            im_track = track_frame.image[pyrlevel]
+            im_track = track_frame.im_pyr[pyrlevel]
 
             pyr_camera = copy.deepcopy(self.camera)
             pyr_camera.fu *= pyrfactor
@@ -148,3 +161,6 @@ class DenseStereoPipeline:
             params = problem.solve()
 
         return params['T_1_0']
+
+    def _optimize_keyframe_graph(self):
+        pass

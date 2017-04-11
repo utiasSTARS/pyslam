@@ -13,7 +13,7 @@ import time
 basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
-frame_range = range(0, 50)
+frame_range = range(50, 150)
 
 dataset = pykitti.raw(basedir, date, drive, frame_range)
 dataset.load_calib()
@@ -53,7 +53,7 @@ for c_idx, f_idx in enumerate(frame_range):
     print('Elapsed time: {} s'.format(end - start))
 
     T_c_w_GT = T_cam0_imu * SE3.from_matrix(dataset.oxts[c_idx].T_w_imu).inv()
-    T_c_w_est = vo.keyframes[c_idx].T_c_w
+    T_c_w_est = vo.T_c_w[c_idx]
 
     errs[c_idx, :] = SE3.log(T_c_w_GT * T_c_w_est.inv())
 
