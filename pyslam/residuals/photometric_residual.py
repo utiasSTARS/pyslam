@@ -4,7 +4,6 @@ import time
 from liegroups import SE3
 
 from pyslam.utils import bilinear_interpolate, stackmul
-from pyslam.losses import L2Loss
 
 
 class PhotometricResidual:
@@ -44,7 +43,8 @@ class PhotometricResidual:
         self.jac_ref = self.jac_ref[strong_pixels, :]
 
         # Precompute triangulated 3D points
-        self.pt_ref = self.camera.triangulate(np.array(self.uvd_ref))
+        self.pt_ref, self.triang_jac = self.camera.triangulate(
+            np.array(self.uvd_ref), compute_jacobians=True)
 
     def evaluate(self, params, compute_jacobians=None):
         T_track_ref = params[0]
@@ -55,12 +55,11 @@ class PhotometricResidual:
 
         pt_track = T_track_ref * self.pt_ref
 
-        if compute_jacobians:
-            im_jac = self.jac_ref
-            uvd_track, project_jac = self.camera.project(
-                pt_track, compute_jacobians=True)
-        else:
-            uvd_track = self.camera.project(pt_track)
+        # if compute_jacobians:
+        uvd_track, project_jac = self.camera.project(
+            pt_track, compute_jacobians=True)
+        # else:
+        #     uvd_track = self.camera.project(pt_track)
 
         # Filter out bad measurements (out of bounds coordinates, nonpositive
         # disparity)
@@ -68,16 +67,36 @@ class PhotometricResidual:
         uvd_track = uvd_track[valid_track, :]
         pt_track = pt_track[valid_track, :]
         im_ref_true = im_ref_true[valid_track]
-        if compute_jacobians:
-            im_jac = im_jac[valid_track, :]
-            project_jac = project_jac[valid_track, :, :]
+        # if compute_jacobians:
+        im_jac = self.jac_ref[valid_track, :]
+        project_jac = project_jac[valid_track, :, :]
+        triang_jac = self.triang_jac[valid_track, :, :]
 
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
         im_ref_est = im_ref_true.shape
         im_ref_est = bilinear_interpolate(
             self.im_track, uvd_track[:, 0], uvd_track[:, 1])
-        residual = self.stiffness * (im_ref_est - im_ref_true)
+        residual = im_ref_est - im_ref_true
+
+        # We need the jacobian of the residual w.r.t. the disparity
+        # to compute a reasonable stiffness paramater
+        im_jac = np.expand_dims(im_jac, axis=1)  # Nx1x2
+        im_proj_jac = np.empty([im_jac.shape[0], 1, 3])  # Nx1x3
+        stackmul(im_jac, project_jac[:, 0:2, :], im_proj_jac)
+        temp = np.empty([im_jac.shape[0], 1, 3])  # Nx1x3
+        R_track_ref = T_track_ref.rot.as_matrix()
+        R_track_ref = np.expand_dims(
+            R_track_ref, axis=0).repeat(im_jac.shape[0], axis=0)  # Nx3x3
+        stackmul(im_proj_jac, R_track_ref, temp)
+        im_disp_jac = np.empty([im_jac.shape[0], 1, 1])  # Nx1x1
+        stackmul(temp, triang_jac[:, :, 2:3], im_disp_jac)
+
+        # Compute the overall stiffness
+        stiffness = 1. / np.sqrt(self.stiffness ** -
+                                 2 + 4. * np.squeeze(im_disp_jac)**2)
+
+        residual = stiffness * residual
 
         # DEBUG: Rebuild residual and disparity images
         # self._rebuild_images(residual, im_ref_est, im_ref_true, valid_track)
@@ -90,23 +109,18 @@ class PhotometricResidual:
 
             if compute_jacobians[0]:
                 jacobians[0] = np.empty([im_jac.shape[0], 1, 6])
-                im_jac = self.stiffness * im_jac
-                im_jac = np.expand_dims(im_jac, axis=1)
-
-                temp = np.empty([im_jac.shape[0], 1, 3])
-                stackmul(im_jac, project_jac[:, 0:2, :], temp)
 
                 odot_pt_track = SE3.odot(pt_track)
-                stackmul(temp, odot_pt_track, jacobians[0])
+                stackmul(im_proj_jac, odot_pt_track, jacobians[0])
 
-                jacobians[0] = np.squeeze(jacobians[0])
+                jacobians[0] = (stiffness * np.squeeze(jacobians[0]).T).T
 
             return residual, jacobians
 
         return residual
 
     def _rebuild_images(self, residual, im_ref_est, im_ref_true, valid_track):
-        """Debug function to rebuild the filtered 
+        """Debug function to rebuild the filtered
         residual and disparity images as a sanity check"""
         uvd_ref = self.uvd_ref[valid_track]
         imshape = (self.camera.h, self.camera.w)
