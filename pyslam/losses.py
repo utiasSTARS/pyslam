@@ -72,3 +72,34 @@ class HuberLoss:
         wght[leq_mask] = 1.
         wght[ge_mask] = self.k / np.abs(x[ge_mask])
         return wght
+
+
+class TukeyLoss:
+    def __init__(self, k):
+        self.k = k
+
+    def loss(self, x):
+        loss = np.zeros(x.size)
+        leq_mask = np.abs(x) <= self.k
+        ge_mask = np.abs(x) > self.k
+        k_squared_over_six = self.k**2 / 6.
+        loss[leq_mask] = k_squared_over_six * \
+            (1 - (1 - (x[leq_mask] / self.k)**2)**3)
+        loss[ge_mask] = k_squared_over_six
+        return loss
+
+    def influence(self, x):
+        infl = np.zeros(x.size)
+        leq_mask = np.abs(x) <= self.k
+        # ge_mask = np.abs(x) > self.k
+        infl[leq_mask] = x[leq_mask] * (1 - (x[leq_mask] / self.k)**2)
+        # infl[ge_mask] = 0.
+        return infl
+
+    def weight(self, x):
+        wght = np.zeros(x.size)
+        leq_mask = np.abs(x) <= self.k
+        # ge_mask = np.abs(x) > self.k
+        wght[leq_mask] = 1 - (x[leq_mask] / self.k)**2
+        # wght[ge_mask] = 0.
+        return wght
