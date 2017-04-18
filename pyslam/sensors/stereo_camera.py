@@ -14,7 +14,9 @@ class StereoCamera:
         self.h = int(h)
 
     def is_valid_measurement(self, uvd):
-        """Check if one or more uvd measurements is valid."""
+        """Check if one or more uvd measurements is valid.
+           Returns a boolean mask of valid measurements.
+        """
         uvd = np.atleast_2d(uvd)
 
         if not uvd.shape[1] == 3:
@@ -46,34 +48,27 @@ class StereoCamera:
                         self.fv * pt_c[:, 1] * one_over_z + self.cv,
                         self.fu * self.b * one_over_z]).T
 
-        # Return NaNs if the measurements are invalid
-        valid_meas = self.is_valid_measurement(uvd)
-        invalid_meas = np.invert(valid_meas)
-        uvd[invalid_meas, :] = np.nan
-
         if compute_jacobians:
             jacobians = np.empty([pt_c.shape[0], 3, 3])
-            jacobians[invalid_meas, :, :] = np.nan
 
-            one_over_z = one_over_z[valid_meas]
             one_over_z2 = one_over_z * one_over_z
 
             # d(u) / d(pt_c)
-            jacobians[valid_meas, 0, 0] = self.fu * one_over_z
-            jacobians[valid_meas, 0, 1] = 0.
-            jacobians[valid_meas, 0, 2] = -self.fu * \
-                pt_c[valid_meas, 0] * one_over_z2
+            jacobians[:, 0, 0] = self.fu * one_over_z
+            jacobians[:, 0, 1] = 0.
+            jacobians[:, 0, 2] = -self.fu * \
+                pt_c[:, 0] * one_over_z2
 
             # d(v) / d(pt_c)
-            jacobians[valid_meas, 1, 0] = 0.
-            jacobians[valid_meas, 1, 1] = self.fv * one_over_z
-            jacobians[valid_meas, 1, 2] = -self.fv * \
-                pt_c[valid_meas, 1] * one_over_z2
+            jacobians[:, 1, 0] = 0.
+            jacobians[:, 1, 1] = self.fv * one_over_z
+            jacobians[:, 1, 2] = -self.fv * \
+                pt_c[:, 1] * one_over_z2
 
             # d(d) / d(pt_c)
-            jacobians[valid_meas, 2, 0] = 0.
-            jacobians[valid_meas, 2, 1] = 0.
-            jacobians[valid_meas, 2, 2] = -self.fu * self.b * one_over_z2
+            jacobians[:, 2, 0] = 0.
+            jacobians[:, 2, 1] = 0.
+            jacobians[:, 2, 2] = -self.fu * self.b * one_over_z2
 
             return np.squeeze(uvd), np.squeeze(jacobians)
 
@@ -96,34 +91,27 @@ class StereoCamera:
                          (uvd[:, 1] - self.cv) * b_over_d * fu_over_fv,
                          self.fu * b_over_d]).T
 
-        # Return NaNs if the measurements are invalid
-        valid_meas = self.is_valid_measurement(uvd)
-        invalid_meas = np.invert(valid_meas)
-        pt_c[invalid_meas, :] = np.nan
-
         if compute_jacobians:
             jacobians = np.empty([uvd.shape[0], 3, 3])
-            jacobians[invalid_meas, :, :] = np.nan
 
-            b_over_d = b_over_d[valid_meas]
-            b_over_d2 = b_over_d / uvd[valid_meas, 2]
+            b_over_d2 = b_over_d / uvd[:, 2]
 
             # d(x) / d(uvd)
-            jacobians[valid_meas, 0, 0] = b_over_d
-            jacobians[valid_meas, 0, 1] = 0.
-            jacobians[valid_meas, 0, 2] = (
-                self.cu - uvd[valid_meas, 0]) * b_over_d2
+            jacobians[:, 0, 0] = b_over_d
+            jacobians[:, 0, 1] = 0.
+            jacobians[:, 0, 2] = (
+                self.cu - uvd[:, 0]) * b_over_d2
 
             # d(y) / d(uvd)
-            jacobians[valid_meas, 1, 0] = 0.
-            jacobians[valid_meas, 1, 1] = b_over_d * fu_over_fv
-            jacobians[valid_meas, 1, 2] = (
-                self.cv - uvd[valid_meas, 1]) * b_over_d2 * fu_over_fv
+            jacobians[:, 1, 0] = 0.
+            jacobians[:, 1, 1] = b_over_d * fu_over_fv
+            jacobians[:, 1, 2] = (
+                self.cv - uvd[:, 1]) * b_over_d2 * fu_over_fv
 
             # d(z) / d(uvd)
-            jacobians[valid_meas, 2, 0] = 0.
-            jacobians[valid_meas, 2, 1] = 0.
-            jacobians[valid_meas, 2, 2] = -self.fu * b_over_d2
+            jacobians[:, 2, 0] = 0.
+            jacobians[:, 2, 1] = 0.
+            jacobians[:, 2, 2] = -self.fu * b_over_d2
 
             return np.squeeze(pt_c), np.squeeze(jacobians)
 
