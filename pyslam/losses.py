@@ -50,27 +50,30 @@ class HuberLoss:
         self.k = k
 
     def loss(self, x):
-        loss = np.zeros(x.size)
-        leq_mask = np.abs(x) <= self.k
-        ge_mask = np.abs(x) > self.k
+        loss = np.empty(x.size)
+        abs_x = np.abs(x)
+        leq_mask = abs_x <= self.k
+        ge_mask = np.logical_not(leq_mask)
         loss[leq_mask] = 0.5 * x[leq_mask]**2
-        loss[ge_mask] = self.k * (np.abs(x[ge_mask]) - 0.5 * self.k)
+        loss[ge_mask] = self.k * (abs_x[ge_mask] - 0.5 * self.k)
         return loss
 
     def influence(self, x):
-        infl = np.zeros(x.size)
+        infl = np.empty(x.size)
+        abs_x = np.abs(x)
         leq_mask = np.abs(x) <= self.k
-        ge_mask = np.abs(x) > self.k
+        ge_mask = np.logical_not(leq_mask)
         infl[leq_mask] = x[leq_mask]
         infl[ge_mask] = self.k * np.sign(x[ge_mask])
         return infl
 
     def weight(self, x):
-        wght = np.zeros(x.size)
-        leq_mask = np.abs(x) <= self.k
-        ge_mask = np.abs(x) > self.k
+        wght = np.empty(x.size)
+        abs_x = np.abs(x)
+        leq_mask = abs_x <= self.k
+        ge_mask = np.logical_not(leq_mask)
         wght[leq_mask] = 1.
-        wght[ge_mask] = self.k / np.abs(x[ge_mask])
+        wght[ge_mask] = self.k / abs_x[ge_mask]
         return wght
 
 
@@ -79,9 +82,9 @@ class TukeyLoss:
         self.k = k
 
     def loss(self, x):
-        loss = np.zeros(x.size)
+        loss = np.empty(x.size)
         leq_mask = np.abs(x) <= self.k
-        ge_mask = np.abs(x) > self.k
+        ge_mask = np.logical_not(leq_mask)
         k_squared_over_six = self.k**2 / 6.
         loss[leq_mask] = k_squared_over_six * \
             (1 - (1 - (x[leq_mask] / self.k)**2)**3)
@@ -89,17 +92,17 @@ class TukeyLoss:
         return loss
 
     def influence(self, x):
-        infl = np.zeros(x.size)
+        infl = np.empty(x.size)
         leq_mask = np.abs(x) <= self.k
-        # ge_mask = np.abs(x) > self.k
+        ge_mask = np.logical_not(leq_mask)
         infl[leq_mask] = x[leq_mask] * (1 - (x[leq_mask] / self.k)**2)
-        # infl[ge_mask] = 0.
+        infl[ge_mask] = 0.
         return infl
 
     def weight(self, x):
-        wght = np.zeros(x.size)
+        wght = np.empty(x.size)
         leq_mask = np.abs(x) <= self.k
-        # ge_mask = np.abs(x) > self.k
+        ge_mask = np.logical_not(leq_mask)
         wght[leq_mask] = 1 - (x[leq_mask] / self.k)**2
-        # wght[ge_mask] = 0.
+        wght[ge_mask] = 0.
         return wght
