@@ -1,10 +1,14 @@
 import numpy as np
+from numba import vectorize, float64
+
+# Numba-vectorized is faster than boolean indexing
+NUMBA_COMPILATION_TARGET = 'cpu'
 
 
 class L2Loss:
 
     def loss(self, x):
-        return 0.5 * x * x
+        return 0.5 * x**2
 
     def influence(self, x):
         return x
@@ -50,31 +54,40 @@ class HuberLoss:
         self.k = k
 
     def loss(self, x):
-        loss = np.empty(x.size)
-        abs_x = np.abs(x)
-        leq_mask = abs_x <= self.k
-        ge_mask = np.logical_not(leq_mask)
-        loss[leq_mask] = 0.5 * x[leq_mask]**2
-        loss[ge_mask] = self.k * (abs_x[ge_mask] - 0.5 * self.k)
-        return loss
+        return _huber_loss(self.k, x)
 
     def influence(self, x):
-        infl = np.empty(x.size)
-        abs_x = np.abs(x)
-        leq_mask = np.abs(x) <= self.k
-        ge_mask = np.logical_not(leq_mask)
-        infl[leq_mask] = x[leq_mask]
-        infl[ge_mask] = self.k * np.sign(x[ge_mask])
-        return infl
+        return _huber_infl
 
     def weight(self, x):
-        wght = np.empty(x.size)
-        abs_x = np.abs(x)
-        leq_mask = abs_x <= self.k
-        ge_mask = np.logical_not(leq_mask)
-        wght[leq_mask] = 1.
-        wght[ge_mask] = self.k / abs_x[ge_mask]
-        return wght
+        return _huber_wght(self.k, x)
+
+
+@vectorize('(float64, float64)', target=NUMBA_COMPILATION_TARGET)
+def _huber_loss(k, x):
+    abs_x = np.abs(x)
+    if abs_x <= k:
+        return 0.5 * x**2
+    else:
+        return k * (abs_x - 0.5 * k)
+
+
+@vectorize('(float64, float64)', target=NUMBA_COMPILATION_TARGET)
+def _huber_infl(k, x):
+    abs_x = np.abs(x)
+    if abs_x <= k:
+        return x
+    else:
+        return k * np.sign(x)
+
+
+@vectorize('(float64, float64)', target=NUMBA_COMPILATION_TARGET)
+def _huber_wght(k, x):
+    abs_x = np.abs(x)
+    if abs_x <= k:
+        return 1.
+    else:
+        return k / abs_x
 
 
 class TukeyLoss:
@@ -82,27 +95,38 @@ class TukeyLoss:
         self.k = k
 
     def loss(self, x):
-        loss = np.empty(x.size)
-        leq_mask = np.abs(x) <= self.k
-        ge_mask = np.logical_not(leq_mask)
-        k_squared_over_six = self.k**2 / 6.
-        loss[leq_mask] = k_squared_over_six * \
-            (1 - (1 - (x[leq_mask] / self.k)**2)**3)
-        loss[ge_mask] = k_squared_over_six
-        return loss
+        return _tukey_loss(self.k, x)
 
     def influence(self, x):
-        infl = np.empty(x.size)
-        leq_mask = np.abs(x) <= self.k
-        ge_mask = np.logical_not(leq_mask)
-        infl[leq_mask] = x[leq_mask] * (1 - (x[leq_mask] / self.k)**2)
-        infl[ge_mask] = 0.
-        return infl
+        return _tukey_infl(self.k, x)
 
     def weight(self, x):
-        wght = np.empty(x.size)
-        leq_mask = np.abs(x) <= self.k
-        ge_mask = np.logical_not(leq_mask)
-        wght[leq_mask] = 1 - (x[leq_mask] / self.k)**2
-        wght[ge_mask] = 0.
-        return wght
+        return _tukey_wght(self.k, x)
+
+
+@vectorize('(float64, float64)', target=NUMBA_COMPILATION_TARGET)
+def _tukey_loss(k, x):
+    abs_x = np.abs(x)
+    k_squared_over_six = k**2 / 6.
+    if abs_x <= k:
+        return k_squared_over_six * (1. - (1. - (x / k)**2)**3)
+    else:
+        return k_squared_over_six
+
+
+@vectorize('(float64, float64)', target=NUMBA_COMPILATION_TARGET)
+def _tukey_infl(k, x):
+    abs_x = np.abs(x)
+    if abs_x <= k:
+        return x * (1. - (x / k)**2)
+    else:
+        return 0.
+
+
+@vectorize('(float64, float64)', target=NUMBA_COMPILATION_TARGET)
+def _tukey_wght(k, x):
+    abs_x = np.abs(x)
+    if abs_x <= k:
+        return 1. - (x / k)**2
+    else:
+        return 0.

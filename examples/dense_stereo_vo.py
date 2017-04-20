@@ -11,11 +11,12 @@ import time
 
 # Load KITTI data
 basedir = '/Users/leeclement/Desktop/KITTI/raw/'
-date = '2011_09_26'
-drive = '0019'
+date = '2011_09_30'
+drive = '0018'
 
-dataset = pykitti.raw(basedir, date, drive,
-                      frames=range(0, 10), imformat='cv2')
+frames = range(0, 500)
+
+dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 
 first_oxts = next(dataset.oxts)
 T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)
@@ -68,7 +69,7 @@ for c_idx, (impair, oxts) in enumerate(zip(dataset.gray, dataset.oxts)):
 # plt.legend()
 # plt.show()
 
-# plt.plot(pos_GT[:, 0], pos_GT[:, 1], label='GT')
-# plt.plot(pos_est[:, 0], pos_est[:, 1], label='est')
-# plt.legend()
-# plt.show()
+plt.plot(pos_GT[:, 0], pos_GT[:, 1], label='GT')
+plt.plot(pos_est[:, 0], pos_est[:, 1], label='est')
+plt.legend()
+plt.show()

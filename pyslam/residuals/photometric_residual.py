@@ -3,6 +3,7 @@ import scipy.interpolate
 import time
 
 from liegroups import SE3
+from pyslam.utils import stackmul, bilinear_interpolate
 
 
 class PhotometricResidual:
@@ -15,17 +16,15 @@ class PhotometricResidual:
         self.camera = camera
         self.im_ref = im_ref.flatten()
 
-        u_range = np.array(range(0, self.camera.w))
-        v_range = np.array(range(0, self.camera.h))
+        u_range = range(0, self.camera.w)
+        v_range = range(0, self.camera.h)
         u_coords, v_coords = np.meshgrid(u_range, v_range, indexing='xy')
         self.uvd_ref = np.vstack(
             [u_coords.flatten(), v_coords.flatten(), disp_ref.flatten()]).T
         self.jac_ref = np.vstack([jac_ref[0, :, :].flatten(),
                                   jac_ref[1, :, :].flatten()]).T
 
-        # This interpolation gets farmed out to some super fast Fortran routine
-        self.im_track = scipy.interpolate.RectBivariateSpline(
-            v_range, u_range, im_track)
+        self.im_track = im_track
 
         self.stiffness = stiffness
 
@@ -55,35 +54,30 @@ class PhotometricResidual:
 
         pt_track = T_track_ref * self.pt_ref
 
-        # if compute_jacobians:
         uvd_track, project_jac = self.camera.project(
             pt_track, compute_jacobians=True)
-        # else:
-        #     uvd_track = self.camera.project(pt_track)
 
-        # Filter out bad measurements (out of bounds coordinates, nonpositive
-        # disparity)
+        # Filter out bad measurements
         valid_track = self.camera.is_valid_measurement(uvd_track)
         uvd_track = uvd_track[valid_track, :]
         pt_track = pt_track[valid_track, :]
         im_ref_true = im_ref_true[valid_track]
-        # if compute_jacobians:
         im_jac = self.jac_ref[valid_track, :]
         project_jac = project_jac[valid_track, :, :]
         triang_jac = self.triang_jac[valid_track, :, :]
 
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
-        im_ref_est = self.im_track(
-            uvd_track[:, 1], uvd_track[:, 0], grid=False)
+        im_ref_est = bilinear_interpolate(
+            self.im_track, uvd_track[:, 0], uvd_track[:, 1])
         residual = im_ref_est - im_ref_true
 
         # We need the jacobian of the residual w.r.t. the disparity
         # to compute a reasonable stiffness paramater
-        im_proj_jac = np.matmul(
+        im_proj_jac = stackmul(
             im_jac[:, None, :], project_jac[:, 0:2, :])  # Nx1x3
-        temp = np.matmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
-        im_disp_jac = np.matmul(temp, triang_jac[:, :, 2:3])  # Nx1x1
+        temp = stackmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
+        im_disp_jac = stackmul(temp, triang_jac[:, :, 2:3])  # Nx1x1
 
         # Compute the overall stiffness
         stiffness = 1. / np.sqrt(self.stiffness ** -
@@ -101,9 +95,7 @@ class PhotometricResidual:
             jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
-                odot_pt_track = SE3.odot(pt_track)
-                jacobians[0] = np.matmul(im_proj_jac, odot_pt_track)
-
+                jacobians[0] = stackmul(im_proj_jac, SE3.odot(pt_track))
                 jacobians[0] = (stiffness * np.squeeze(jacobians[0]).T).T
 
             return residual, jacobians

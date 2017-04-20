@@ -350,7 +350,8 @@ class Problem:
         best_cost = np.inf
 
         iters = 0
-        done_linesearch = False
+        # Do nothing if linesearch_max_iters <= 0
+        done_linesearch = iters < self.options.linesearch_max_iters
 
         while not done_linesearch:
             iters += 1

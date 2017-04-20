@@ -7,7 +7,7 @@ from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
 from pyslam.residuals import PhotometricResidual
-from pyslam.losses import HuberLoss, L2Loss
+from pyslam.losses import HuberLoss, L2Loss, TukeyLoss
 from pyslam.utils import invsqrt
 
 
@@ -100,10 +100,10 @@ class DenseStereoPipeline:
             trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels)
 
             guess = self.T_c_w[-1] * self.keyframes[-1].T_c_w.inv()
-            print('guess = \n{}'.format(SE3.log(guess)))
+            # print('guess = \n{}'.format(SE3.log(guess)))
             T_track_ref = self._compute_frame_to_frame_motion(
                 self.keyframes[-1], trackframe, guess)
-            print('est = \n{}'.format(SE3.log(T_track_ref)))
+            # print('est = \n{}'.format(SE3.log(T_track_ref)))
 
             self.T_c_w.append(T_track_ref * self.keyframes[-1].T_c_w)
 
@@ -127,10 +127,10 @@ class DenseStereoPipeline:
         pyrlevel_sequence = list(range(self.pyrlevels))
         pyrlevel_sequence.reverse()
 
-        stiffness = 1. / 0.1
+        stiffness = 1. / 0.05
         # loss = L2Loss()
         # loss = HuberLoss(1.345)
-        loss = HuberLoss(0.1)
+        loss = TukeyLoss(1.345)
 
         for pyrlevel in pyrlevel_sequence[:-1]:
             pyrfactor = 2**-pyrlevel
@@ -151,9 +151,6 @@ class DenseStereoPipeline:
             residual = PhotometricResidual(
                 pyr_camera, im_ref, disp_ref, jac_ref, im_track,
                 stiffness)
-
-            # import ipdb
-            # ipdb.set_trace()
 
             problem = Problem(self.problem_options)
             problem.add_residual_block(residual, ['T_1_0'], loss=loss)
