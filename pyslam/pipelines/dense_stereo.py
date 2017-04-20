@@ -84,7 +84,11 @@ class DenseStereoPipeline:
         self.problem_options.max_iters = 30
 
         # Number of image pyramid levels for coarse-to-fine optimization
-        self.pyrlevels = 6
+        self.pyrlevels = 5
+
+        # Squared distance thresholds to drop new keyframes
+        self.keyframe_trans_thresh = 3.
+        self.keyframe_rot_thresh = 0.2
 
     def track(self, im_left, im_right):
         # import ipdb
@@ -111,10 +115,16 @@ class DenseStereoPipeline:
             se3_vec = SE3.log(T_track_ref)
             trans_dist = np.linalg.norm(se3_vec[0:3])
             rot_dist = np.linalg.norm(se3_vec[3:6])
-            print('trans_dist = {}, rot_dist = {}'.format(trans_dist, rot_dist))
-            if trans_dist > 2 or rot_dist > 0.2:
+
+            # print('trans_dist = {}, rot_dist = {}'.format(trans_dist, rot_dist))
+
+            if trans_dist > self.keyframe_trans_thresh or \
+                    rot_dist > self.keyframe_rot_thresh:
                 trackframe.T_c_w = self.T_c_w[-1]
-                trackframe.T_c_w.normalize()  # Numerical instability problems otherwise
+
+                # Numerical instability problems otherwise
+                trackframe.T_c_w.normalize()
+
                 trackframe.compute_jacobian_and_disparity()
                 self.keyframes.append(trackframe)
                 print('Dropped new keyframe. Now have {}.'.format(
@@ -127,35 +137,34 @@ class DenseStereoPipeline:
         pyrlevel_sequence = list(range(self.pyrlevels))
         pyrlevel_sequence.reverse()
 
-        stiffness = 1. / 0.05
+        stiffness = 1. / 0.1
         # loss = L2Loss()
         # loss = HuberLoss(1.345)
-        loss = TukeyLoss(1.345)
+        # loss = TukeyLoss(1.345)
+        loss = HuberLoss(0.1)
 
         for pyrlevel in pyrlevel_sequence[:-1]:
             pyrfactor = 2**-pyrlevel
-
-            im_ref = ref_frame.im_pyr[pyrlevel]
-            disp_ref = ref_frame.disparity[pyrlevel]
-            jac_ref = ref_frame.jacobian[pyrlevel]
-            im_track = track_frame.im_pyr[pyrlevel]
 
             pyr_camera = copy.deepcopy(self.camera)
             pyr_camera.fu *= pyrfactor
             pyr_camera.fv *= pyrfactor
             pyr_camera.cu *= pyrfactor
             pyr_camera.cv *= pyrfactor
-            pyr_camera.w = im_ref.shape[1]
-            pyr_camera.h = im_ref.shape[0]
+            pyr_camera.h, pyr_camera.w = ref_frame.im_pyr[pyrlevel].shape
 
-            residual = PhotometricResidual(
-                pyr_camera, im_ref, disp_ref, jac_ref, im_track,
-                stiffness)
+            residual = PhotometricResidual(pyr_camera,
+                                           ref_frame.im_pyr[pyrlevel],
+                                           ref_frame.disparity[pyrlevel],
+                                           ref_frame.jacobian[pyrlevel],
+                                           track_frame.im_pyr[pyrlevel],
+                                           stiffness)
 
             problem = Problem(self.problem_options)
             problem.add_residual_block(residual, ['T_1_0'], loss=loss)
             problem.initialize_params(params)
             params = problem.solve()
+            # print(problem.summary(format='brief'))
 
         return params['T_1_0']
 

@@ -36,7 +36,7 @@ class PhotometricResidual:
 
         # Filter out pixels with weak gradients
         grad_ref = np.sum(self.jac_ref**2, axis=1)
-        strong_pixels = grad_ref >= 0.25**2
+        strong_pixels = grad_ref >= 0.3**2
         self.uvd_ref = self.uvd_ref[strong_pixels, :]
         self.im_ref = self.im_ref[strong_pixels]
         self.jac_ref = self.jac_ref[strong_pixels, :]
@@ -50,8 +50,6 @@ class PhotometricResidual:
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
-        im_ref_true = self.im_ref
-
         pt_track = T_track_ref * self.pt_ref
 
         uvd_track, project_jac = self.camera.project(
@@ -61,10 +59,10 @@ class PhotometricResidual:
         valid_track = self.camera.is_valid_measurement(uvd_track)
         uvd_track = uvd_track[valid_track, :]
         pt_track = pt_track[valid_track, :]
-        im_ref_true = im_ref_true[valid_track]
-        im_jac = self.jac_ref[valid_track, :]
-        project_jac = project_jac[valid_track, :, :]
-        triang_jac = self.triang_jac[valid_track, :, :]
+        im_ref_true = self.im_ref[valid_track]
+        im_jac = self.jac_ref[valid_track, None, :]
+        project_jac = project_jac[valid_track, 0:2, :]
+        triang_jac = self.triang_jac[valid_track, :, 2:3]
 
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
@@ -74,10 +72,9 @@ class PhotometricResidual:
 
         # We need the jacobian of the residual w.r.t. the disparity
         # to compute a reasonable stiffness paramater
-        im_proj_jac = stackmul(
-            im_jac[:, None, :], project_jac[:, 0:2, :])  # Nx1x3
+        im_proj_jac = stackmul(im_jac, project_jac)  # Nx1x3
         temp = stackmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
-        im_disp_jac = stackmul(temp, triang_jac[:, :, 2:3])  # Nx1x1
+        im_disp_jac = stackmul(temp, triang_jac)  # Nx1x1
 
         # Compute the overall stiffness
         stiffness = 1. / np.sqrt(self.stiffness ** -

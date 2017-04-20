@@ -101,12 +101,8 @@ params_true = {'T_1_0': T_1_0_true, 'T_2_0': T_2_0_true,
 
 problem.initialize_params(params_init)
 
-print("Initial Residual: %e\n" % problem.eval_cost())
-
 params_final = problem.solve()
-print()
-
-print("Final Residual: %e\n" % problem.eval_cost())
+print(problem.summary(format='full'))
 
 print("Initial Error:")
 for key in params_true.keys():

@@ -59,8 +59,6 @@ class TestStereoCamera:
         uvd, jacobians = sensor.project(test_xyz12, True)
         assert uvd.shape == (2, 3)
         assert jacobians.shape == (2, 3, 3)
-        assert np.all(np.isnan(uvd[1, :]))
-        assert np.all(np.isnan(jacobians[1, :, :]))
 
     def test_triangulate_vectorized(self, sensor):
         test_uvd1 = [110., 120., 10.]
@@ -69,5 +67,3 @@ class TestStereoCamera:
         xyz, jacobians = sensor.triangulate(test_uvd12, True)
         assert xyz.shape == (2, 3)
         assert jacobians.shape == (2, 3, 3)
-        assert np.all(np.isnan(xyz[1, :]))
-        assert np.all(np.isnan(jacobians[1, :, :]))

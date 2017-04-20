@@ -33,11 +33,6 @@ class Options:
         self.max_nondecreasing_steps = 3
         """Maximum number of non-dereasing steps before terminating."""
 
-        self.print_summary = True
-        """Print a summary of the optimization after completion."""
-        self.print_iter_summary = False
-        """Print the initial and final cost after each iteration."""
-
 
 class Problem:
     """Class for building optimization problems."""
@@ -179,17 +174,6 @@ class Problem:
             # Update cost history
             self._cost_history.append(cost)
 
-            # Print iteration summary
-            if self.options.print_iter_summary:
-                print('Iter: {:3} | Cost: {:12e} --> {:12e}'.format(
-                    optimization_iters, prev_cost, cost))
-
-        # Print optimization summary
-        if self.options.print_summary:
-            print('Iterations: {:3} | Cost: {:12e} --> {:12e}'.format(
-                optimization_iters,
-                self._cost_history[0], self._cost_history[-1]))
-
         return self.param_dict
 
     def solve_one_iter(self):
@@ -198,7 +182,8 @@ class Problem:
         # start = time.perf_counter()
         precision, information = self._build_precision_and_information()
         # end = time.perf_counter()
-        # print('build_precision_and_information: {:.5f} s'.format(end - start))
+        # print('build_precision_and_information: {:.5f} s'.format(end -
+        # start))
 
         # start = time.perf_counter()
         dx = splinalg.spsolve(precision, information)
@@ -235,27 +220,35 @@ class Problem:
 
         return None
 
-    def summary(self):
-        """Return a summary of the optimization."""
+    def summary(self, format='brief'):
+        """Return a summary of the optimization.
+
+           format='brief' : Number of iterations, initial/final cost
+           format='full'  : Initial/final cost and relative change at each iteration
+        """
         if not self._cost_history:
             raise ValueError('solve has not yet been called')
 
-        if format == 'brief':
-            # summary = [[summary_header], [format_string.format]]
-            pass
+        if format is 'brief':
+            entry_format_string = 'Iterations: {:3} | Cost: {:12e} --> {:12e}'
+            summary = entry_format_string.format(len(self._cost_history),
+                                                 self._cost_history[0],
+                                                 self._cost_history[-1])
 
-        if format == 'full':
-            entry_format_string = iter_nums = range(
-                len(self._cost_history) - 1)
-            summary = []
-            for i, ic, fc in zip(iter_nums,
-                                 self._cost_history[:-1], self._cost_history[1:]):
-                summary.append(entry_format_string.format(i, ic, fc))
+        elif format is 'full':
+            header_string = '{:>5s} | {:>12s} --> {:>12s} | {:>10s}\n'.format(
+                'Iter', 'Initial cost', 'Final cost', 'Rel change')
+            entry_format_string = '{:5} | {:12e} --> {:12e} | {:+10f}\n'
+            summary = [header_string, '-' * len(header_string) + '\n']
+            for i, ic, fc in zip(range(len(self._cost_history)),
+                                 self._cost_history[:-1],
+                                 self._cost_history[1:]):
+                summary.append(entry_format_string.format(
+                    i, ic, fc, (fc - ic) / ic))
 
-            return ''.join(summary)
+            summary = ''.join(summary)
 
-        raise ValueError('Invalid summary format \'{}\'. '
-                         'Options are \'brief\' or \'full\'.'.format(format))
+        return summary
 
     def _get_update_partition_dict(self):
         """Helper function to partition the full update vector."""
@@ -325,8 +318,8 @@ class Problem:
                     if jac is not None:
                         block_cidx = block_cidx_dict[key]
                         # transposes needed for proper broadcasting
-                        H_blocks[block_ridx][block_cidx] = \
-                            sparse.csr_matrix((loss_weight.T * jac.T).T)
+                        H_blocks[block_ridx][block_cidx] = sparse.csr_matrix(
+                            (loss_weight.T * jac.T).T)
 
                 e_blocks[block_ridx] = loss_weight * residual
 
@@ -385,11 +378,11 @@ class Problem:
 
     def _perturb_by_key(self, key, dx, param_dict=None):
         """Helper function to update a parameter given an update vector."""
-        if not param_dict:
+        if param_dict is None:
             param_dict = self.param_dict
 
-        if hasattr(param_dict[key], 'perturb'):
+        try:
             param_dict[key].perturb(dx)
-        else:
+        except AttributeError:
             # Default vector space behaviour
             param_dict[key] += dx

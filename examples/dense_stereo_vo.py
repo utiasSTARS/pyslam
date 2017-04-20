@@ -14,7 +14,7 @@ basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
 
-frames = range(0, 500)
+frames = range(0, 100)
 
 dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 
@@ -45,12 +45,7 @@ pos_est = np.empty(pos_GT.shape)
 for c_idx, (impair, oxts) in enumerate(zip(dataset.gray, dataset.oxts)):
     print('Image {}'.format(c_idx))
 
-    start = time.perf_counter()
-
     vo.track(impair[0], impair[1])
-
-    end = time.perf_counter()
-    print('Elapsed time: {} s'.format(end - start))
 
     T_c_w_GT = T_cam0_imu * SE3.from_matrix(oxts.T_w_imu).inv()
     T_c_w_est = vo.T_c_w[c_idx]
