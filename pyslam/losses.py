@@ -2,7 +2,7 @@ import numpy as np
 from numba import vectorize, float64
 
 # Numba-vectorized is faster than boolean indexing
-NUMBA_COMPILATION_TARGET = 'cpu'
+NUMBA_COMPILATION_TARGET = 'parallel'
 
 
 class L2Loss:
@@ -48,17 +48,20 @@ class CauchyLoss:
         return _cauchy_wght(k, x)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _cauchy_loss(k, x):
     return (0.5 * k**2) * np.log(1 + (x / k)**2)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _cauchy_infl(k, x):
     return x / (1 + (x / k)**2)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _cauchy_wght(k, x):
     return 1 / (1 + (x / k)**2)
 
@@ -78,7 +81,8 @@ class HuberLoss:
         return _huber_wght(self.k, x)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _huber_loss(k, x):
     abs_x = np.abs(x)
     if abs_x <= k:
@@ -87,7 +91,8 @@ def _huber_loss(k, x):
         return k * (abs_x - 0.5 * k)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _huber_infl(k, x):
     abs_x = np.abs(x)
     if abs_x <= k:
@@ -96,7 +101,8 @@ def _huber_infl(k, x):
         return k * np.sign(x)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _huber_wght(k, x):
     abs_x = np.abs(x)
     if abs_x <= k:
@@ -119,7 +125,8 @@ class TukeyLoss:
         return _tukey_wght(self.k, x)
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _tukey_loss(k, x):
     abs_x = np.abs(x)
     k_squared_over_six = k**2 / 6.
@@ -129,7 +136,8 @@ def _tukey_loss(k, x):
         return k_squared_over_six
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _tukey_infl(k, x):
     abs_x = np.abs(x)
     if abs_x <= k:
@@ -138,7 +146,8 @@ def _tukey_infl(k, x):
         return 0.
 
 
-@vectorize([float64(float64, float64)], target=NUMBA_COMPILATION_TARGET)
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
 def _tukey_wght(k, x):
     abs_x = np.abs(x)
     if abs_x <= k:

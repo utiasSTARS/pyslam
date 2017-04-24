@@ -14,7 +14,7 @@ basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
 
-frames = range(0, 100)
+frames = range(0, 10)
 
 dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 

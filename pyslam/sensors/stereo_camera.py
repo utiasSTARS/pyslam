@@ -1,7 +1,7 @@
 import numpy as np
 from numba import guvectorize, float64, boolean
 
-NUMBA_COMPILATION_TARGET = 'cpu'
+NUMBA_COMPILATION_TARGET = 'parallel'
 
 
 class StereoCamera:
@@ -18,7 +18,7 @@ class StereoCamera:
 
     def is_valid_measurement(self, uvd):
         """Check if one or more uvd measurements is valid.
-           Returns a boolean mask of valid measurements.
+           Returns indices of valid measurements.
         """
         uvd = np.atleast_2d(uvd)
 
