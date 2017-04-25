@@ -14,9 +14,9 @@ basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0018'
 
-frames = range(0, 10)
+frames = range(0, 50)
 
-dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
+dataset = pykitti.raw(basedir, date, drive, frames=None, imformat='cv2')
 
 first_oxts = next(dataset.oxts)
 T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)

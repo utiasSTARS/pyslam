@@ -133,8 +133,7 @@ class Problem:
 
         while not done_optimization:
             optimization_iters += 1
-
-            prev_cost = self._cost_history[-1]
+            prev_cost = cost
 
             if self.options.allow_nondecreasing_steps and \
                     nondecreasing_steps_taken == 0:
@@ -146,9 +145,7 @@ class Problem:
 
             # Update parameters
             for k, r in self._update_partition_dict.items():
-                # print("Before:\n", str(self.param_dict[k]))
                 self._perturb_by_key(k, dx[r])
-                # print("After:\n", str(self.param_dict[k]))
 
             # Check if done optimizing
             cost = self.eval_cost()
@@ -179,22 +176,11 @@ class Problem:
     def solve_one_iter(self):
         """Solve one iteration of Gauss-Newton."""
         # precision * dx = information
-        # start = time.perf_counter()
         precision, information = self._build_precision_and_information()
-        # end = time.perf_counter()
-        # print('build_precision_and_information: {:.5f} s'.format(end -
-        # start))
-
-        # start = time.perf_counter()
         dx = splinalg.spsolve(precision, information)
-        # end = time.perf_counter()
-        # print('spsolve: {:.5f} s'.format(end - start))
 
         # Backtrack line search
-        # start = time.perf_counter()
         best_step_size = self._do_line_search(dx)
-        # end = time.perf_counter()
-        # print('do_line_search: {:.5f} s'.format(end - start))
 
         return best_step_size * dx
 
@@ -247,6 +233,10 @@ class Problem:
                     i, ic, fc, (fc - ic) / ic))
 
             summary = ''.join(summary)
+        else:
+            raise ValueError(
+                'Invalid summary format \'{}\'.'.format(format) +
+                'Valid formats are \'brief\' and \'full\'')
 
         return summary
 
@@ -292,8 +282,8 @@ class Problem:
         # Note that this is an exactly equivalent formulation, but avoids needing
         # to explicitly construct and multiply the (possibly very large) W
         # matrix.
-        H_blocks = [[None for _ in self.param_dict]
-                    for _ in self.residual_blocks]
+        HT_blocks = [[None for _ in self.residual_blocks]
+                     for _ in self.param_dict]
         e_blocks = [None for _ in self.residual_blocks]
 
         block_cidx_dict = dict(zip(self.param_dict.keys(),
@@ -318,21 +308,18 @@ class Problem:
                     if jac is not None:
                         block_cidx = block_cidx_dict[key]
                         # transposes needed for proper broadcasting
-                        H_blocks[block_ridx][block_cidx] = sparse.csr_matrix(
-                            (loss_weight.T * jac.T).T)
+                        HT_blocks[block_cidx][block_ridx] = sparse.csr_matrix(
+                            loss_weight.T * jac.T)
 
                 e_blocks[block_ridx] = loss_weight * residual
 
             block_ridx += 1
 
-        H = sparse.bmat(H_blocks, format='csr')
+        HT = sparse.bmat(HT_blocks, format='csr')
         e = np.squeeze(np.bmat(e_blocks).A)
 
-        precision = H.T.dot(H)
-        information = -H.T.dot(e)
-
-        # import ipdb
-        # ipdb.set_trace()
+        precision = HT.dot(HT.T)
+        information = -HT.dot(e)
 
         return precision, information
 
@@ -344,7 +331,7 @@ class Problem:
 
         iters = 0
         # Do nothing if linesearch_max_iters <= 0
-        done_linesearch = iters < self.options.linesearch_max_iters
+        done_linesearch = iters <= self.options.linesearch_max_iters
 
         while not done_linesearch:
             iters += 1

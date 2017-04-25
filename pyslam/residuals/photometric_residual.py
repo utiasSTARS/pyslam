@@ -100,6 +100,7 @@ class PhotometricResidual:
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
         # start = time.perf_counter()
+        # This is actually faster than filtering the intermediate results!
         im_ref_est = bilinear_interpolate(self.im_track,
                                           uvd_track[:, 0],
                                           uvd_track[:, 1])
@@ -126,8 +127,7 @@ class PhotometricResidual:
         # print('residual stiffness | {}'.format(end - start))
 
         # DEBUG: Rebuild residual and disparity images
-        # self._rebuild_images(residual, im_ref_est,
-        #                      self.im_ref[valid_pixels], valid_pixels)
+        # self._rebuild_images(residual, im_ref_est, self.im_ref, valid_pixels)
         # import ipdb
         # ipdb.set_trace()
 
@@ -137,14 +137,15 @@ class PhotometricResidual:
 
             if compute_jacobians[0]:
                 # start = time.perf_counter()
-                odot_pt_track = fast_se3_odot(
-                    pt_track[valid_pixels, :], se3_odot_shape)
+                odot_pt_track = fast_se3_odot(pt_track, se3_odot_shape)
                 # end = time.perf_counter()
                 # print('jacobians odot | {}'.format(end - start))
 
                 # start = time.perf_counter()
-                jacobians[0] = stackmul(im_proj_jac[valid_pixels, :],
-                                        odot_pt_track)
+                # This is actually faster than filtering the intermediate
+                # results!
+                jacobians[0] = stackmul(im_proj_jac, odot_pt_track)[
+                    valid_pixels, :, :]
                 # end = time.perf_counter()
                 # print('jacobians matmul | {}'.format(end - start))
 
@@ -166,17 +167,21 @@ class PhotometricResidual:
         imshape = (self.camera.h, self.camera.w)
 
         self.actual_reference_image = np.full(imshape, np.nan)
-        self.actual_reference_image[uvd_ref.astype(int)[:, 1],
-                                    uvd_ref.astype(int)[:, 0]] = im_ref_true
+        self.actual_reference_image[
+            uvd_ref.astype(int)[:, 1],
+            uvd_ref.astype(int)[:, 0]] = im_ref_true[valid_pixels]
 
         self.estimated_reference_image = np.full(imshape, np.nan)
-        self.estimated_reference_image[uvd_ref.astype(int)[:, 1],
-                                       uvd_ref.astype(int)[:, 0]] = im_ref_est
+        self.estimated_reference_image[
+            uvd_ref.astype(int)[:, 1],
+            uvd_ref.astype(int)[:, 0]] = im_ref_est[valid_pixels]
 
         self.residual_image = np.full(imshape, np.nan)
-        self.residual_image[uvd_ref.astype(int)[:, 1],
-                            uvd_ref.astype(int)[:, 0]] = residual
+        self.residual_image[
+            uvd_ref.astype(int)[:, 1],
+            uvd_ref.astype(int)[:, 0]] = residual
 
         self.disparity_image = np.full(imshape, np.nan)
-        self.disparity_image[uvd_ref.astype(int)[:, 1],
-                             uvd_ref.astype(int)[:, 0]] = uvd_ref[:, 2]
+        self.disparity_image[
+            uvd_ref.astype(int)[:, 1],
+            uvd_ref.astype(int)[:, 0]] = uvd_ref[:, 2]

@@ -24,12 +24,12 @@ class L1Loss:
 
     def influence(self, x):
         infl = np.sign(x)
-        infl[np.abs(x) < 0.1] = np.nan
+        infl[np.isclose(np.abs(x), 0.)] = np.nan
         return infl
 
     def weight(self, x):
         wght = 1. / np.abs(x)
-        wght[np.abs(x) < 0.1] = np.nan
+        wght[np.isclose(np.abs(x), 0.)] = np.nan
         return wght
 
 
@@ -51,19 +51,19 @@ class CauchyLoss:
 @vectorize([float64(float64, float64)], nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _cauchy_loss(k, x):
-    return (0.5 * k**2) * np.log(1 + (x / k)**2)
+    return (0.5 * k**2) * np.log(1. + (x / k)**2)
 
 
 @vectorize([float64(float64, float64)], nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _cauchy_infl(k, x):
-    return x / (1 + (x / k)**2)
+    return x / (1. + (x / k)**2)
 
 
 @vectorize([float64(float64, float64)], nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _cauchy_wght(k, x):
-    return 1 / (1 + (x / k)**2)
+    return 1. / (1. + (x / k)**2)
 
 
 class HuberLoss:
@@ -112,6 +112,7 @@ def _huber_wght(k, x):
 
 
 class TukeyLoss:
+
     def __init__(self, k):
         self.k = k
 
@@ -154,3 +155,36 @@ def _tukey_wght(k, x):
         return 1. - (x / k)**2
     else:
         return 0.
+
+
+class TDistributionLoss:
+    def __init__(self, k):
+        self.k = k
+        """t-distribution degrees of freedom"""
+
+    def loss(self, x):
+        return _tdist_loss(self.k, x)
+
+    def influence(self, x):
+        return _tdist_infl(self.k, x)
+
+    def weight(self, x):
+        return _tdist_wght(self.k, x)
+
+
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
+def _tdist_loss(k, x):
+    return 0.5 * (k + 1.) * np.log(1. + x**2 / k)
+
+
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
+def _tdist_infl(k, x):
+    return (k + 1.) * x / (k + x**2)
+
+
+@vectorize([float64(float64, float64)], nopython=True, cache=True,
+           target=NUMBA_COMPILATION_TARGET)
+def _tdist_wght(k, x):
+    return (k + 1.) / (k + x**2)

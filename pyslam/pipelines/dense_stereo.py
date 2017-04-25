@@ -7,7 +7,7 @@ from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
 from pyslam.residuals import PhotometricResidual
-from pyslam.losses import HuberLoss, L2Loss, TukeyLoss
+from pyslam.losses import L2Loss, HuberLoss, TukeyLoss, TDistributionLoss
 from pyslam.utils import invsqrt
 
 
@@ -47,7 +47,6 @@ class DenseKeyframe:
 
         # Compute disparity at full resolution and downsample
         disp = stereo.compute(self.im_left, self.im_right).astype(float) / 16.
-        disp[disp < 0] = np.nan
 
         for pyrlevel in range(self.pyrlevels):
             if pyrlevel == 0:
@@ -73,7 +72,7 @@ class DenseStereoPipeline:
         self.keyframes = []
         """List of keyframes"""
         self.T_c_w = [first_pose]
-        """List of camera poses"""
+        """Previous motion estimate for generating next initial guess."""
         self.problem_options = Options()
         """Optimizer parameters"""
 
@@ -83,12 +82,25 @@ class DenseStereoPipeline:
         self.problem_options.min_cost_decrease = 0.99
         self.problem_options.max_iters = 30
 
-        # Number of image pyramid levels for coarse-to-fine optimization
-        self.pyrlevels = 5
+        self.pyrlevels = 4
+        """Number of image pyramid levels for coarse-to-fine optimization"""
+        self.pyrlevel_sequence = list(range(self.pyrlevels))[1:]
+        self.pyrlevel_sequence.reverse()
 
-        # Squared distance thresholds to drop new keyframes
-        self.keyframe_trans_thresh = 3.
-        self.keyframe_rot_thresh = 0.2
+        self.keyframe_trans_thresh = 3.0  # [m]
+        """Translational distance threshold to drop new keyframes"""
+        self.keyframe_rot_thresh = 0.2  # [rad]
+        """Rotational distance threshold to drop new keyframes"""
+
+        self.stiffness = 1. / 0.1
+        """Measurement stiffness"""
+
+        # self.loss = L2Loss()
+        # self.loss = HuberLoss(5.)
+        # self.loss = TukeyLoss(5.)
+        # self.loss = HuberLoss(0.1)
+        self.loss = TDistributionLoss(5.0)  # Kerl et al. ICRA 2013
+        """Loss function"""
 
     def track(self, im_left, im_right):
         # import ipdb
@@ -103,12 +115,16 @@ class DenseStereoPipeline:
             # Default behaviour for second frame and beyond
             trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels)
 
+            # Default initial guess is previous pose relative to keyframe
             guess = self.T_c_w[-1] * self.keyframes[-1].T_c_w.inv()
-            # print('guess = \n{}'.format(SE3.log(guess)))
+            # Better initial guess is previous pose + previous motion
+            if len(self.T_c_w) > 1:
+                guess = self.T_c_w[-1] * self.T_c_w[-2].inv() * guess
+
+            # Estimate pose change from keyframe to tracking frame
             T_track_ref = self._compute_frame_to_frame_motion(
                 self.keyframes[-1], trackframe, guess)
-            # print('est = \n{}'.format(SE3.log(T_track_ref)))
-
+            T_track_ref.normalize()  # Numerical instability problems otherwise
             self.T_c_w.append(T_track_ref * self.keyframes[-1].T_c_w)
 
             # Threshold the distance from the active keyframe to drop a new one
@@ -121,29 +137,18 @@ class DenseStereoPipeline:
             if trans_dist > self.keyframe_trans_thresh or \
                     rot_dist > self.keyframe_rot_thresh:
                 trackframe.T_c_w = self.T_c_w[-1]
-
-                # Numerical instability problems otherwise
-                trackframe.T_c_w.normalize()
-
                 trackframe.compute_jacobian_and_disparity()
                 self.keyframes.append(trackframe)
-                print('Dropped new keyframe. Now have {}.'.format(
-                    len(self.keyframes)))
+
+                print('Dropped new keyframe. '
+                      'Trans dist was {:.3f}. Rot dist was {:.3f}. Now have {}.'.format(
+                          trans_dist, rot_dist, len(self.keyframes)))
 
     def _compute_frame_to_frame_motion(self, ref_frame, track_frame,
                                        guess=SE3.identity()):
         params = {'T_1_0': guess}
 
-        pyrlevel_sequence = list(range(self.pyrlevels))
-        pyrlevel_sequence.reverse()
-
-        stiffness = 1. / 0.1
-        # loss = L2Loss()
-        # loss = HuberLoss(1.345)
-        # loss = TukeyLoss(1.345)
-        loss = HuberLoss(0.1)
-
-        for pyrlevel in pyrlevel_sequence[:-1]:
+        for pyrlevel in self.pyrlevel_sequence:
             pyrfactor = 2**-pyrlevel
 
             pyr_camera = copy.deepcopy(self.camera)
@@ -158,10 +163,10 @@ class DenseStereoPipeline:
                                            ref_frame.disparity[pyrlevel],
                                            ref_frame.jacobian[pyrlevel],
                                            track_frame.im_pyr[pyrlevel],
-                                           stiffness)
+                                           self.stiffness)
 
             problem = Problem(self.problem_options)
-            problem.add_residual_block(residual, ['T_1_0'], loss=loss)
+            problem.add_residual_block(residual, ['T_1_0'], loss=self.loss)
             problem.initialize_params(params)
             params = problem.solve()
             # print(problem.summary(format='brief'))
