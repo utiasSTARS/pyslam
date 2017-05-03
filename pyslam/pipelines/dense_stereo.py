@@ -7,7 +7,7 @@ from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
 from pyslam.residuals import PhotometricResidual
-from pyslam.losses import L2Loss, HuberLoss, TukeyLoss, TDistributionLoss
+from pyslam.losses import TDistributionLoss
 from pyslam.utils import invsqrt
 
 
@@ -72,45 +72,45 @@ class DenseStereoPipeline:
         self.keyframes = []
         """List of keyframes"""
         self.T_c_w = [first_pose]
-        """Previous motion estimate for generating next initial guess."""
-        self.problem_options = Options()
-        """Optimizer parameters"""
+        """List of camera poses"""
+        self.motion_options = Options()
+        """Optimizer parameters for motion estimation"""
 
-        # Default optimizer parameters
-        self.problem_options.allow_nondecreasing_steps = True
-        self.problem_options.max_nondecreasing_steps = 5
-        self.problem_options.min_cost_decrease = 0.99
-        self.problem_options.max_iters = 30
+        # Default optimizer parameters for motion estimation
+        self.motion_options.allow_nondecreasing_steps = True
+        self.motion_options.max_nondecreasing_steps = 5
+        self.motion_options.min_cost_decrease = 0.99
+        self.motion_options.max_iters = 30
 
         self.pyrlevels = 4
         """Number of image pyramid levels for coarse-to-fine optimization"""
         self.pyrlevel_sequence = list(range(self.pyrlevels))[1:]
         self.pyrlevel_sequence.reverse()
 
-        self.keyframe_trans_thresh = 3.0  # [m]
+        self.keyframe_trans_thresh = 3.0  # meters
         """Translational distance threshold to drop new keyframes"""
-        self.keyframe_rot_thresh = 0.2  # [rad]
+        self.keyframe_rot_thresh = 0.2  # rad
         """Rotational distance threshold to drop new keyframes"""
 
-        self.stiffness = 1. / 0.1
-        """Measurement stiffness"""
+        self.intensity_stiffness = 1. / 0.1
+        self.disparity_stiffness = 1. / 2.
+        """Photometric measurement stiffness"""
 
         # self.loss = L2Loss()
-        # self.loss = HuberLoss(5.)
-        # self.loss = TukeyLoss(5.)
-        # self.loss = HuberLoss(0.1)
+        # self.loss = HuberLoss(5.0)
+        # self.loss = TukeyLoss(5.0)
+        # self.loss = CauchyLoss(5.0)
         self.loss = TDistributionLoss(5.0)  # Kerl et al. ICRA 2013
         """Loss function"""
 
     def track(self, im_left, im_right):
-        # import ipdb
-        # ipdb.set_trace()
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
             trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels,
                                        self.T_c_w[0])
             trackframe.compute_jacobian_and_disparity()
             self.keyframes.append(trackframe)
+
         else:
             # Default behaviour for second frame and beyond
             trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels)
@@ -131,8 +131,6 @@ class DenseStereoPipeline:
             se3_vec = SE3.log(T_track_ref)
             trans_dist = np.linalg.norm(se3_vec[0:3])
             rot_dist = np.linalg.norm(se3_vec[3:6])
-
-            # print('trans_dist = {}, rot_dist = {}'.format(trans_dist, rot_dist))
 
             if trans_dist > self.keyframe_trans_thresh or \
                     rot_dist > self.keyframe_rot_thresh:
@@ -163,15 +161,13 @@ class DenseStereoPipeline:
                                            ref_frame.disparity[pyrlevel],
                                            ref_frame.jacobian[pyrlevel],
                                            track_frame.im_pyr[pyrlevel],
-                                           self.stiffness)
+                                           self.intensity_stiffness,
+                                           self.disparity_stiffness)
 
-            problem = Problem(self.problem_options)
+            problem = Problem(self.motion_options)
             problem.add_residual_block(residual, ['T_1_0'], loss=self.loss)
             problem.initialize_params(params)
             params = problem.solve()
             # print(problem.summary(format='brief'))
 
         return params['T_1_0']
-
-    def _optimize_keyframe_graph(self):
-        pass

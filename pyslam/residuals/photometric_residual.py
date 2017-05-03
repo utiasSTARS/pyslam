@@ -7,7 +7,7 @@ from pyslam.utils import stackmul, bilinear_interpolate
 from numba import guvectorize, float64
 
 
-se3_odot_shape = np.empty(6)
+SE3_ODOT_SHAPE = np.empty(6)
 
 
 @guvectorize([(float64[:], float64[:], float64[:, :])],
@@ -39,7 +39,7 @@ class PhotometricResidual:
     tracking image jacobian under the assumption that the camera motion is small."""
 
     def __init__(self, camera, im_ref, disp_ref, jac_ref,
-                 im_track, stiffness):
+                 im_track, intensity_stiffness, disparity_stiffness):
         self.camera = camera
         self.im_ref = im_ref.ravel()
 
@@ -53,26 +53,25 @@ class PhotometricResidual:
 
         self.im_track = im_track
 
-        self.stiffness = stiffness
+        self.intensity_stiffness = intensity_stiffness
+        self.disparity_stiffness = disparity_stiffness
 
         # Filter out invalid pixels (NaN or negative disparity)
-        valid_pixels = np.where(
-            self.camera.is_valid_measurement(
-                self.uvd_ref))[0]  # where returns a tuple
-        self.uvd_ref = self.uvd_ref[valid_pixels, :]
-        self.im_ref = self.im_ref[valid_pixels]
-        self.jac_ref = self.jac_ref[valid_pixels, :]
+        valid_pixels = self.camera.is_valid_measurement(self.uvd_ref)
+        self.uvd_ref = self.uvd_ref.compress(valid_pixels, axis=0)
+        self.im_ref = self.im_ref.compress(valid_pixels)
+        self.jac_ref = self.jac_ref.compress(valid_pixels, axis=0)
 
         # Filter out pixels with weak gradients
         grad_ref = np.linalg.norm(self.jac_ref, axis=1)
-        strong_pixels = np.where(grad_ref >= 0.05)[0]  # where returns a tuple
-        self.uvd_ref = self.uvd_ref[strong_pixels, :]
-        self.im_ref = self.im_ref[strong_pixels]
-        self.jac_ref = self.jac_ref[strong_pixels, :]
+        strong_pixels = grad_ref >= 0.05
+        self.uvd_ref = self.uvd_ref.compress(strong_pixels, axis=0)
+        self.im_ref = self.im_ref.compress(strong_pixels)
+        self.jac_ref = self.jac_ref.compress(strong_pixels, axis=0)
 
         # Precompute triangulated 3D points
         self.pt_ref, self.triang_jac = self.camera.triangulate(
-            np.array(self.uvd_ref), compute_jacobians=True)
+            self.uvd_ref, compute_jacobians=True)
 
     def evaluate(self, params, compute_jacobians=None):
         T_track_ref = params[0]
@@ -93,7 +92,7 @@ class PhotometricResidual:
         # Filter out bad measurements
         # start = time.perf_counter()
         # where returns a tuple
-        valid_pixels = np.where(self.camera.is_valid_measurement(uvd_track))[0]
+        valid_pixels = self.camera.is_valid_measurement(uvd_track)
         # end = time.perf_counter()
         # print('validate | {}'.format(end - start))
 
@@ -104,7 +103,7 @@ class PhotometricResidual:
         im_ref_est = bilinear_interpolate(self.im_track,
                                           uvd_track[:, 0],
                                           uvd_track[:, 1])
-        residual = (im_ref_est - self.im_ref)[valid_pixels]
+        residual = (im_ref_est - self.im_ref).compress(valid_pixels)
         # end = time.perf_counter()
         # print('interpolate residual | {}'.format(end - start))
 
@@ -118,9 +117,10 @@ class PhotometricResidual:
         im_disp_jac = stackmul(temp, self.triang_jac[:, :, 2:3])  # Nx1x1
 
         # Compute the overall stiffness
-        stiffness = 1. / np.sqrt(self.stiffness ** -
-                                 2 + 4. * np.squeeze(
-                                     im_disp_jac[valid_pixels, :, :])**2)
+        # \sigma^2 = \sigma^2_I + J_d \sigma^2_d J_d^T
+        stiffness = 1. / np.sqrt((self.intensity_stiffness ** -2) +
+                                 (self.disparity_stiffness ** -2) * np.squeeze(
+            im_disp_jac.compress(valid_pixels, axis=0))**2)
 
         residual = stiffness * residual
         # end = time.perf_counter()
@@ -137,15 +137,15 @@ class PhotometricResidual:
 
             if compute_jacobians[0]:
                 # start = time.perf_counter()
-                odot_pt_track = fast_se3_odot(pt_track, se3_odot_shape)
+                odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
                 # end = time.perf_counter()
                 # print('jacobians odot | {}'.format(end - start))
 
                 # start = time.perf_counter()
                 # This is actually faster than filtering the intermediate
                 # results!
-                jacobians[0] = stackmul(im_proj_jac, odot_pt_track)[
-                    valid_pixels, :, :]
+                jacobians[0] = stackmul(im_proj_jac, odot_pt_track).compress(
+                    valid_pixels, axis=0)
                 # end = time.perf_counter()
                 # print('jacobians matmul | {}'.format(end - start))
 

@@ -39,13 +39,13 @@ class CauchyLoss:
         self.k = k
 
     def loss(self, x):
-        return _cauchy_loss(k, x)
+        return _cauchy_loss(self.k, x)
 
     def influence(self, x):
-        return _cauchy_infl(k, x)
+        return _cauchy_infl(self.k, x)
 
     def weight(self, x):
-        return _cauchy_wght(k, x)
+        return _cauchy_wght(self.k, x)
 
 
 @vectorize([float64(float64, float64)], nopython=True, cache=True,

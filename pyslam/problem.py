@@ -188,8 +188,8 @@ class Problem:
         """Compute the covariance matrix after solve has terminated."""
         try:
             # Re-evaluate the precision matrix with the final parameters
-            precision_matrix, _ = self._build_precision_and_information()
-            self._covariance_matrix = splinalg.inv(precision_matrix).toarray()
+            precision, _ = self._build_precision_and_information()
+            self._covariance_matrix = splinalg.inv(precision.tocsc()).toarray()
         except Exception as e:
             print('Covariance computation failed!\n{}'.format(e))
 
@@ -289,10 +289,10 @@ class Problem:
         block_cidx_dict = dict(zip(self.param_dict.keys(),
                                    list(range(len(self.param_dict)))))
 
-        block_ridx = 0
-        for block, keys, loss in zip(self.residual_blocks,
-                                     self.block_param_keys,
-                                     self.block_loss_functions):
+        for block_ridx, (block, keys, loss) in \
+            enumerate(zip(self.residual_blocks,
+                          self.block_param_keys,
+                          self.block_loss_functions)):
             params = [self.param_dict[key] for key in keys]
             compute_jacobians = [False if key in self.constant_param_keys
                                  else True for key in keys]
@@ -312,8 +312,6 @@ class Problem:
                             loss_weight.T * jac.T)
 
                 e_blocks[block_ridx] = loss_weight * residual
-
-            block_ridx += 1
 
         HT = sparse.bmat(HT_blocks, format='csr')
         e = np.squeeze(np.bmat(e_blocks).A)
