@@ -6,7 +6,7 @@ import pykitti
 from liegroups import SE3
 from pyslam.pipelines import DenseStereoPipeline
 from pyslam.sensors import StereoCamera
-from pyslam import metrics
+from pyslam.metrics import TrajectoryMetrics
 
 import time
 
@@ -43,52 +43,54 @@ for c_idx, impair in enumerate(dataset.gray):
     vo.track(impair[0], impair[1])
 
 # Compute and plot errors
-errs = np.empty([len(dataset), 6])
-pos_GT = np.empty([len(dataset), 3])
-pos_est = np.empty(pos_GT.shape)
+T_c_w_gt = [T_cam0_imu * SE3.from_matrix(o.T_w_imu).inv()
+            for o in dataset.oxts]
+T_c_w_est = [T for T in vo.T_c_w]
 
-for c_idx, (T_c_w_est, oxts) in enumerate(zip(vo.T_c_w, dataset.oxts)):
-    T_c_w_GT = T_cam0_imu * SE3.from_matrix(oxts.T_w_imu).inv()
-
-    errs[c_idx, :] = SE3.log(T_c_w_GT * T_c_w_est.inv())
-    # rotate translational errors into world frame
-    errs[c_idx, 0:3] = T_c_w_GT.inv().rot * errs[c_idx, 0:3]
-    pos_GT[c_idx, :] = T_c_w_GT.inv().trans
-    pos_est[c_idx, :] = T_c_w_est.inv().trans
-
-dist_GT = np.diff(pos_GT[:, 0:3], axis=0)
-dist_GT = np.cumsum(np.linalg.norm(dist_GT, axis=1))
-dist_GT = np.append([0.], dist_GT)
+pos_gt = np.array([T.inv().trans for T in T_c_w_gt])
+pos_est = np.array([T.inv().trans for T in T_c_w_est])
 
 plt.figure()
-plt.plot(dist_GT, errs[:, 0], label='x')
-plt.plot(dist_GT, errs[:, 1], label='y')
-plt.plot(dist_GT, errs[:, 2], label='z')
-plt.plot(dist_GT, errs[:, 3], label=r'$\theta_x$')
-plt.plot(dist_GT, errs[:, 4], label=r'$\theta_y$')
-plt.plot(dist_GT, errs[:, 5], label=r'$\theta_z$')
-plt.xlabel('distance traveled [m]')
-plt.ylabel('error [m] or [rad]')
-plt.legend()
-
-# plt.figure()
-# plt.plot(dist_GT, pos_est[:, 0] - pos_GT[:, 0], label='x')
-# plt.plot(dist_GT, pos_est[:, 1] - pos_GT[:, 1], label='y')
-# plt.plot(dist_GT, pos_est[:, 2] - pos_GT[:, 2], label='z')
-# plt.legend()
-
-plt.figure()
-plt.plot(dist_GT, metrics.rmse(errs[:, 0:3]), label='trans rmse')
-# plt.plot(dist_GT, metrics.rmse(errs[:, 3:6]), label='rot rmse')
-plt.xlabel('distance traveled [m]')
-plt.ylabel('rmse [m] or [aa]')
-plt.legend()
-print('trans armse: {}'.format(metrics.armse(errs[:, 0:3])))
-print('rot armse: {}'.format(metrics.armse(errs[:, 3:6])))
-
-plt.figure()
-plt.plot(pos_GT[:, 0], pos_GT[:, 1], label='GT')
+plt.plot(pos_gt[:, 0], pos_gt[:, 1], label='gt')
 plt.plot(pos_est[:, 0], pos_est[:, 1], label='est')
 plt.legend()
+
+tm = TrajectoryMetrics(T_c_w_gt, T_c_w_est, convention='vw')
+segerrs, avg_segerr = tm.segment_errors(np.linspace(100, 800, 8))
+# segerrs, avg_segerr = tm.segment_errors([1, 5, 10])
+
+f, ax = plt.subplots(1, 2)
+ax[0].plot(avg_segerr[:, 0], avg_segerr[:, 1] * 100., '-s')
+ax[0].set_title('Translational error')
+ax[0].set_xlabel('Sequence length (m)')
+ax[0].set_ylabel('Average relative error (%)')
+ax[1].plot(avg_segerr[:, 0], avg_segerr[:, 2] * 180. / np.pi, '-s')
+ax[1].set_title('Rotational error')
+ax[1].set_xlabel('Sequence length (m)')
+ax[1].set_ylabel('Average relative error (deg/m)')
+
+# trans_errs, rot_errs = tm.pose_errors()
+# plt.figure()
+# plt.plot(tm.distances, trans_errs[:, 0], label='x')
+# plt.plot(tm.distances, trans_errs[:, 1], label='y')
+# plt.plot(tm.distances, trans_errs[:, 2], label='z')
+# plt.plot(tm.distances, rot_errs[:, 0], label=r'$\theta_x$')
+# plt.plot(tm.distances, rot_errs[:, 1], label=r'$\theta_y$')
+# plt.plot(tm.distances, rot_errs[:, 2], label=r'$\theta_z$')
+# plt.xlabel('distance traveled [m]')
+# plt.ylabel('error [m] or [rad]')
+# plt.legend()
+
+# trans_rmse, rot_rmse = tm.rmse()
+# plt.figure()
+# plt.plot(tm.distances, trans_rmse, label='trans rmse')
+# plt.plot(tm.distances, rot_rmse, label='rot rmse')
+# plt.xlabel('distance traveled [m]')
+# plt.ylabel('rmse [m] or [aa]')
+# plt.legend()
+
+trans_armse, rot_armse = tm.armse()
+print('trans armse: {} meters'.format(trans_armse))
+print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
 
 plt.show()
