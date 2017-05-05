@@ -112,3 +112,57 @@ class ReprojectionResidualFrameToFrameBatch:
             3*self.num_pts, order='F')
 
         return residual
+
+
+class ReprojectionResidualFrameToFrameBatchTranslationOnly:
+    """Frame to frame reprojection error with batch jacobians and (for multiple reprojections) for translation only."""
+
+    def __init__(self, camera, obs_1, obs_2, C_21, stiffness):
+        self.camera = camera
+        self.obs_1 = obs_1
+        self.obs_2 = obs_2
+        self.C_21 = C_21
+        self.stiffness = stiffness
+        self.pt_cam1 = self.camera.triangulate(self.obs_1)
+        self.num_pts = len(self.obs_1)
+
+
+    def evaluate(self, params, compute_jacobians=None):
+        """ """
+       # t_21_1 = params[0]
+       # T_cam2_cam1 = SE3(rot=self.C_21, trans=-1*self.C_21.as_matrix().dot(t_21_1))
+        t_12_2 = params[0]
+        T_cam2_cam1 = SE3(rot=self.C_21, trans=t_12_2)
+        pt_cam2 = T_cam2_cam1 * self.pt_cam1
+
+        
+        if compute_jacobians:
+            jacobians = [None for _ in enumerate(params)]
+
+            predicted_obs, cam_jacobians = self.camera.project(
+                pt_cam2, compute_jacobians=True)
+            
+            residual = np.reshape(
+                self.stiffness.dot((predicted_obs - self.obs_2).T), 
+                3*self.num_pts, order='F')
+
+            if compute_jacobians[0]:
+                #C_21_repeats = np.asarray([-1*self.C_21.as_matrix()]*self.num_pts) #Repeat the jacobian matrix (3,3) into a (N,3,3) matrix
+                #inner_jacob = stackmul(cam_jacobians, C_21_repeats)
+                inner_jacob = cam_jacobians
+                #We must multiply all the Jacobians by a stiffness matrix
+                stiffness_repeats = np.asarray([self.stiffness]*self.num_pts) #Repeat the stiffness matrix (3,3) into a (N,3,3) matrix
+                jacob = stackmul(stiffness_repeats, inner_jacob)
+
+                #Reshape back into a (3*N, 3) Jacobian
+                jacobians[0] = np.reshape(jacob, [3*self.num_pts, 3])
+
+               
+            return residual, jacobians
+        
+        #Multiply (3,3) by (3,N), and then reshape to get a (3*N,) array
+        residual = np.reshape(
+            self.stiffness.dot((self.camera.project(pt_cam2) - self.obs_2).T), 
+            3*self.num_pts, order='F')
+
+        return residual
