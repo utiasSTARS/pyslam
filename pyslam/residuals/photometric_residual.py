@@ -2,15 +2,17 @@ import numpy as np
 import scipy.interpolate
 import time
 
+from liegroups import SE3
 from pyslam.utils import stackmul, bilinear_interpolate
 
-from numba import guvectorize, float64
+from numba import guvectorize, float32, float64
 
 
 SE3_ODOT_SHAPE = np.empty(6)
 
 
-@guvectorize([(float64[:], float64[:], float64[:, :])],
+@guvectorize([(float32[:], float32[:], float32[:, :]),
+              (float64[:], float64[:], float64[:, :])],
              '(n),(m)->(n,m)', nopython=True, cache=True, target='parallel')
 def fast_se3_odot(vec, junk, out):
     out[0, 0] = 1.
@@ -39,7 +41,7 @@ class PhotometricResidual:
     tracking image jacobian under the assumption that the camera motion is small."""
 
     def __init__(self, camera, im_ref, disp_ref, jac_ref,
-                 im_track, intensity_stiffness, disparity_stiffness):
+                 im_track, intensity_stiffness, disparity_stiffness, min_grad=0.):
         self.camera = camera
         self.im_ref = im_ref.ravel()
 
@@ -55,6 +57,10 @@ class PhotometricResidual:
 
         self.intensity_stiffness = intensity_stiffness
         self.disparity_stiffness = disparity_stiffness
+        self.intensity_covar = intensity_stiffness ** -2
+        self.disparity_covar = disparity_stiffness ** -2
+
+        self.min_grad = min_grad
 
         # Filter out invalid pixels (NaN or negative disparity)
         valid_pixels = self.camera.is_valid_measurement(self.uvd_ref)
@@ -64,7 +70,7 @@ class PhotometricResidual:
 
         # Filter out pixels with weak gradients
         grad_ref = np.linalg.norm(self.jac_ref, axis=1)
-        strong_pixels = grad_ref >= 0.05
+        strong_pixels = grad_ref >= self.min_grad
         self.uvd_ref = self.uvd_ref.compress(strong_pixels, axis=0)
         self.im_ref = self.im_ref.compress(strong_pixels)
         self.jac_ref = self.jac_ref.compress(strong_pixels, axis=0)
@@ -78,38 +84,24 @@ class PhotometricResidual:
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
-        # start = time.perf_counter()
         pt_track = T_track_ref * self.pt_ref
-        # end = time.perf_counter()
-        # print('\ntransform | {}'.format(end - start))
-
-        # start = time.perf_counter()
         uvd_track, project_jac = self.camera.project(
             pt_track, compute_jacobians=True)
-        # end = time.perf_counter()
-        # print('project | {}'.format(end - start))
 
         # Filter out bad measurements
-        # start = time.perf_counter()
         # where returns a tuple
         valid_pixels = self.camera.is_valid_measurement(uvd_track)
-        # end = time.perf_counter()
-        # print('validate | {}'.format(end - start))
 
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
-        # start = time.perf_counter()
         # This is actually faster than filtering the intermediate results!
         im_ref_est = bilinear_interpolate(self.im_track,
                                           uvd_track[:, 0],
                                           uvd_track[:, 1])
         residual = (im_ref_est - self.im_ref).compress(valid_pixels)
-        # end = time.perf_counter()
-        # print('interpolate residual | {}'.format(end - start))
 
         # We need the jacobian of the residual w.r.t. the disparity
         # to compute a reasonable stiffness paramater
-        # start = time.perf_counter()
         # This is actually faster than filtering the intermediate results!
         im_proj_jac = stackmul(self.jac_ref[:, np.newaxis, :],
                                project_jac[:, 0:2, :])  # Nx1x3
@@ -118,13 +110,11 @@ class PhotometricResidual:
 
         # Compute the overall stiffness
         # \sigma^2 = \sigma^2_I + J_d \sigma^2_d J_d^T
-        stiffness = 1. / np.sqrt((self.intensity_stiffness ** -2) +
-                                 (self.disparity_stiffness ** -2) * np.squeeze(
-            im_disp_jac.compress(valid_pixels, axis=0))**2)
-
+        stiffness = 1. / np.sqrt(self.intensity_covar +
+                                 self.disparity_covar * np.squeeze(
+                                     im_disp_jac.compress(valid_pixels, axis=0))**2)
+        # stiffness = self.intensity_stiffness
         residual = stiffness * residual
-        # end = time.perf_counter()
-        # print('residual stiffness | {}'.format(end - start))
 
         # DEBUG: Rebuild residual and disparity images
         # self._rebuild_images(residual, im_ref_est, self.im_ref, valid_pixels)
@@ -136,25 +126,13 @@ class PhotometricResidual:
             jacobians = [None]
 
             if compute_jacobians[0]:
-                # start = time.perf_counter()
                 odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
-                # end = time.perf_counter()
-                # print('jacobians odot | {}'.format(end - start))
-
-                # start = time.perf_counter()
                 # This is actually faster than filtering the intermediate
                 # results!
                 jacobians[0] = stackmul(im_proj_jac, odot_pt_track).compress(
                     valid_pixels, axis=0)
-                # end = time.perf_counter()
-                # print('jacobians matmul | {}'.format(end - start))
-
-                # start = time.perf_counter()
                 # Transposes needed for proper broadcasting
                 jacobians[0] = (stiffness * np.squeeze(jacobians[0].T)).T
-
-                # end = time.perf_counter()
-                # print('jacobians stiffness | {}\n'.format(end - start))
 
             return residual, jacobians
 

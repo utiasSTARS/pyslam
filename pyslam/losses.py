@@ -1,5 +1,5 @@
 import numpy as np
-from numba import vectorize, float64
+from numba import vectorize, float32, float64
 
 # Numba-vectorized is faster than boolean indexing
 NUMBA_COMPILATION_TARGET = 'parallel'
@@ -48,19 +48,25 @@ class CauchyLoss:
         return _cauchy_wght(self.k, x)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _cauchy_loss(k, x):
     return (0.5 * k**2) * np.log(1. + (x / k)**2)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _cauchy_infl(k, x):
     return x / (1. + (x / k)**2)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _cauchy_wght(k, x):
     return 1. / (1. + (x / k)**2)
@@ -81,7 +87,9 @@ class HuberLoss:
         return _huber_wght(self.k, x)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _huber_loss(k, x):
     abs_x = np.abs(x)
@@ -91,7 +99,9 @@ def _huber_loss(k, x):
         return k * (abs_x - 0.5 * k)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _huber_infl(k, x):
     abs_x = np.abs(x)
@@ -101,7 +111,9 @@ def _huber_infl(k, x):
         return k * np.sign(x)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _huber_wght(k, x):
     abs_x = np.abs(x)
@@ -126,7 +138,9 @@ class TukeyLoss:
         return _tukey_wght(self.k, x)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tukey_loss(k, x):
     abs_x = np.abs(x)
@@ -137,7 +151,9 @@ def _tukey_loss(k, x):
         return k_squared_over_six
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tukey_infl(k, x):
     abs_x = np.abs(x)
@@ -147,7 +163,9 @@ def _tukey_infl(k, x):
         return 0.
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tukey_wght(k, x):
     abs_x = np.abs(x)
@@ -172,19 +190,25 @@ class TDistributionLoss:
         return _tdist_wght(self.k, x)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tdist_loss(k, x):
     return 0.5 * (k + 1.) * np.log(1. + x**2 / k)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tdist_infl(k, x):
     return (k + 1.) * x / (k + x**2)
 
 
-@vectorize([float64(float64, float64)], nopython=True, cache=True,
+@vectorize([float32(float32, float32),
+            float64(float64, float64)],
+           nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tdist_wght(k, x):
     return (k + 1.) / (k + x**2)

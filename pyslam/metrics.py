@@ -59,7 +59,10 @@ class TrajectoryMetrics:
 
     def segment_errors(self, segment_lengths):
         """Compute endpoint errors and average endpoint errors
-            as % of distance travelled for all possible segments of specified lengths in meters.
+            all possible segments of specified lengths in meters.
+
+            Output format (Nx3): 
+            length | proportional trans err (unitless) | proportional rot err (rad/meter)
         """
         # Compute all endpoint errors for each segment length
         errs = []

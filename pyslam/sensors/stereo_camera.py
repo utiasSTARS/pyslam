@@ -1,5 +1,5 @@
 import numpy as np
-from numba import guvectorize, float64, boolean
+from numba import guvectorize, float32, float64, boolean
 
 NUMBA_COMPILATION_TARGET = 'parallel'
 
@@ -75,7 +75,8 @@ class StereoCamera:
                                                           self.w, self.h)
 
 
-@guvectorize([(float64[:], float64[:], boolean[:])],
+@guvectorize([(float32[:], float32[:], boolean[:]),
+              (float64[:], float64[:], boolean[:])],
              '(n),(m)->()', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def _stereo_validate(uvd, imshape, out):
     w, h = imshape
@@ -84,7 +85,8 @@ def _stereo_validate(uvd, imshape, out):
         (uvd[0] > 0.) & (uvd[0] < w)
 
 
-@guvectorize([(float64[:], float64[:], float64[:])],
+@guvectorize([(float32[:], float32[:], float32[:]),
+              (float64[:], float64[:], float64[:])],
              '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def _stereo_project(pt_c, params, out):
     cu, cv, fu, fv, b = params
@@ -95,7 +97,8 @@ def _stereo_project(pt_c, params, out):
     out[2] = fu * b * one_over_z
 
 
-@guvectorize([(float64[:], float64[:], float64[:, :])],
+@guvectorize([(float32[:], float32[:], float32[:, :]),
+              (float64[:], float64[:], float64[:, :])],
              '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def _stereo_project_jacobian(pt_c, params, out):
     cu, cv, fu, fv, b = params
@@ -119,7 +122,8 @@ def _stereo_project_jacobian(pt_c, params, out):
     out[2, 2] = -fu * b * one_over_z2
 
 
-@guvectorize([(float64[:], float64[:], float64[:])],
+@guvectorize([(float32[:], float32[:], float32[:]),
+              (float64[:], float64[:], float64[:])],
              '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def _stereo_triangulate(uvd, params, out):
     cu, cv, fu, fv, b = params
@@ -132,7 +136,8 @@ def _stereo_triangulate(uvd, params, out):
     out[2] = fu * b_over_d
 
 
-@guvectorize([(float64[:], float64[:], float64[:, :])],
+@guvectorize([(float32[:], float32[:], float32[:, :]),
+              (float64[:], float64[:], float64[:, :])],
              '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def _stereo_triangulate_jacobian(uvd, params, out):
     cu, cv, fu, fv, b = params
