@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.linalg as splinalg
-from numba import vectorize, guvectorize, float64
+from numba import vectorize, guvectorize, float32, float64
 
 NUMBA_COMPILATION_TARGET = 'parallel'
 
@@ -13,7 +13,8 @@ def invsqrt(x):
     return 1. / np.sqrt(x)
 
 
-@guvectorize([(float64[:, :], float64[:], float64[:], float64[:])],
+@guvectorize([(float32[:, :], float32[:], float32[:], float32[:]),
+              (float64[:, :], float64[:], float64[:], float64[:])],
              '(n,m),(),()->()', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def bilinear_interpolate(im, x, y, out):
     """Perform bilinear interpolation on a 2D array."""
@@ -64,7 +65,8 @@ def bilinear_interpolate(im, x, y, out):
     out[0] = wa * Ia + wb * Ib + wc * Ic + wd * Id
 
 
-@guvectorize([(float64[:, :], float64[:, :], float64[:, :])],
+@guvectorize([(float32[:, :], float32[:, :], float32[:, :]),
+              (float64[:, :], float64[:, :], float64[:, :])],
              '(n,m),(m,p)->(n,p)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
 def stackmul(A, B, out):
     """Multiply stacks of matrices in parallel."""
