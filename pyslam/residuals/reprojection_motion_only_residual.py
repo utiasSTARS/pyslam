@@ -28,7 +28,7 @@ def fast_se3_odot(vec, junk, out):
     out[2, 5] = 0.
 
 
-class ReprojectionResidualFrameToFrame:
+class ReprojectionMotionOnlyResidual:
     """Frame to frame reprojection error for any kind of camera."""
 
     def __init__(self, camera, obs_1, obs_2, stiffness):
@@ -64,7 +64,7 @@ class ReprojectionResidualFrameToFrame:
 
 
 
-class ReprojectionResidualFrameToFrameBatch:
+class ReprojectionMotionOnlyBatchResidual:
     """Frame to frame reprojection error with batch jacobians (for multiple reprojections)."""
 
     def __init__(self, camera, obs_1, obs_2, stiffness):
@@ -114,7 +114,7 @@ class ReprojectionResidualFrameToFrameBatch:
         return residual
 
 
-class ReprojectionResidualFrameToFrameBatchTranslationOnly:
+class ReprojectionTranslationOnlyBatchResidual:
     """Frame to frame reprojection error with batch jacobians and (for multiple reprojections) for translation only."""
 
     def __init__(self, camera, obs_1, obs_2, C_21, stiffness):
