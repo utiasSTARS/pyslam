@@ -81,14 +81,14 @@ class DenseStereoPipeline:
         self.motion_options.min_cost_decrease = 0.99
         self.motion_options.max_iters = 30
 
-        self.pyrlevels = 4
+        self.pyrlevels = 5
         """Number of image pyramid levels for coarse-to-fine optimization"""
         self.pyrlevel_sequence = list(range(self.pyrlevels))[1:]
         self.pyrlevel_sequence.reverse()
 
         self.keyframe_trans_thresh = 3.0  # meters
         """Translational distance threshold to drop new keyframes"""
-        self.keyframe_rot_thresh = 0.2  # rad
+        self.keyframe_rot_thresh = 0.3  # rad
         """Rotational distance threshold to drop new keyframes"""
 
         self.intensity_stiffness = 1. / 0.02
@@ -149,7 +149,8 @@ class DenseStereoPipeline:
 
     def _compute_frame_to_frame_motion(self, ref_frame, track_frame,
                                        guess=SE3.identity()):
-        params = {'T_1_0': guess}
+        # params = {'T_1_0': guess}
+        params = {'R_1_0': guess.rot, 't_1_0_1': guess.trans}
 
         for pyrlevel in self.pyrlevel_sequence:
             pyrfactor = 2**-pyrlevel
@@ -171,8 +172,17 @@ class DenseStereoPipeline:
                                            self.min_grad)
 
             problem = Problem(self.motion_options)
-            problem.add_residual_block(residual, ['T_1_0'], loss=self.loss)
+            # problem.add_residual_block(residual, ['T_1_0'], loss=self.loss)
+            problem.add_residual_block(
+                residual, ['R_1_0', 't_1_0_1'], loss=self.loss)
             problem.initialize_params(params)
+
+            if pyrlevel > 2:
+                problem.set_parameters_constant('t_1_0_1')
+            else:
+                pass
+                # problem.set_parameters_constant('R_1_0')
+
             params = problem.solve()
             # print(problem.summary(format='brief'))
 
@@ -183,4 +193,5 @@ class DenseStereoPipeline:
             # except AttributeError:
             #     self.residuals = residual.evaluate([guess])
 
-        return params['T_1_0']
+        # return params['T_1_0']
+        return SE3(params['R_1_0'], params['t_1_0_1'])

@@ -80,7 +80,13 @@ class PhotometricResidual:
             self.uvd_ref, compute_jacobians=True)
 
     def evaluate(self, params, compute_jacobians=None):
-        T_track_ref = params[0]
+        if len(params) == 1:
+            T_track_ref = params[0]
+        elif len(params) == 2:
+            T_track_ref = SE3(params[0], params[1])
+        else:
+            raise ValueError(
+                'In PhotometricResidual.evaluate() params must have length 1 or 2')
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
@@ -123,16 +129,32 @@ class PhotometricResidual:
 
         # Jacobian time!
         if compute_jacobians:
-            jacobians = [None]
+            if len(params) == 1:
+                jacobians = [None]
 
-            if compute_jacobians[0]:
+                if compute_jacobians[0]:
+                    odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
+                    # This is actually faster than filtering the intermediate
+                    # results!
+                    jacobians[0] = stackmul(im_proj_jac, odot_pt_track).compress(
+                        valid_pixels, axis=0)
+                    # Transposes needed for proper broadcasting
+                    jacobians[0] = (stiffness * np.squeeze(jacobians[0].T)).T
+
+            elif len(params) == 2:
+                jacobians = [None, None]
+
                 odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
-                # This is actually faster than filtering the intermediate
-                # results!
-                jacobians[0] = stackmul(im_proj_jac, odot_pt_track).compress(
+                jac = stackmul(im_proj_jac, odot_pt_track).compress(
                     valid_pixels, axis=0)
-                # Transposes needed for proper broadcasting
-                jacobians[0] = (stiffness * np.squeeze(jacobians[0].T)).T
+                jac = (stiffness * np.squeeze(jac.T)).T
+
+                if compute_jacobians[0]:
+                    # Rotation part
+                    jacobians[0] = jac[:, 3:6]
+                if compute_jacobians[1]:
+                    # Translation part
+                    jacobians[1] = jac[:, 0:3]
 
             return residual, jacobians
 

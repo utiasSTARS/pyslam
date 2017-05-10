@@ -31,7 +31,7 @@ import pickle
 basedir = '/Users/leeclement/Desktop/KITTI/raw/'
 date = '2011_09_30'
 drive = '0033'
-frames = range(0, 159)
+frames = range(0, 1590)
 
 dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 
