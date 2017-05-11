@@ -1,5 +1,5 @@
 import copy
-import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import scipy.sparse as sparse
@@ -32,6 +32,9 @@ class Options:
         """Enable non-decreasing steps to escape local minima."""
         self.max_nondecreasing_steps = 3
         """Maximum number of non-dereasing steps before terminating."""
+
+        self.num_threads = 4
+        """Number of threads to use for residual and jacobian evaluation."""
 
 
 class Problem:
@@ -282,6 +285,7 @@ class Problem:
         # Note that this is an exactly equivalent formulation, but avoids needing
         # to explicitly construct and multiply the (possibly very large) W
         # matrix.
+
         HT_blocks = [[None for _ in self.residual_blocks]
                      for _ in self.param_dict]
         e_blocks = [None for _ in self.residual_blocks]
@@ -289,29 +293,20 @@ class Problem:
         block_cidx_dict = dict(zip(self.param_dict.keys(),
                                    list(range(len(self.param_dict)))))
 
-        for block_ridx, (block, keys, loss) in \
-            enumerate(zip(self.residual_blocks,
-                          self.block_param_keys,
-                          self.block_loss_functions)):
-            params = [self.param_dict[key] for key in keys]
-            compute_jacobians = [False if key in self.constant_param_keys
-                                 else True for key in keys]
+        # Evaluate residual and jacobian blocks in parallel
+        with ThreadPoolExecutor(
+                max_workers=self.options.num_threads) as executor:
 
-            # Drop the residual if all the parameters used to compute it are
-            # being held constant
-            if any(compute_jacobians):
-                residual, jacobians = block.evaluate(params, compute_jacobians)
-                # Weight for iteratively reweighted least squares
-                sqrt_loss_weight = np.sqrt(loss.weight(residual))
+            for block_ridx, (block, keys, loss) in \
+                enumerate(zip(self.residual_blocks,
+                              self.block_param_keys,
+                              self.block_loss_functions)):
 
-                for key, jac in zip(keys, jacobians):
-                    if jac is not None:
-                        block_cidx = block_cidx_dict[key]
-                        # transposes needed for proper broadcasting
-                        HT_blocks[block_cidx][block_ridx] = sparse.csr_matrix(
-                            sqrt_loss_weight.T * jac.T)
-
-                e_blocks[block_ridx] = sqrt_loss_weight * residual
+                executor.submit(
+                    self._populate_residual_and_jacobian_blocks,
+                    HT_blocks, e_blocks,
+                    block_cidx_dict, block_ridx,
+                    block, keys, loss)
 
         HT = sparse.bmat(HT_blocks, format='csr')
         e = np.squeeze(np.bmat(e_blocks).A)
@@ -320,6 +315,30 @@ class Problem:
         information = -HT.dot(e)
 
         return precision, information
+
+    def _populate_residual_and_jacobian_blocks(self,
+                                               HT_blocks, e_blocks,
+                                               block_cidx_dict, block_ridx,
+                                               block, keys, loss):
+        params = [self.param_dict[key] for key in keys]
+        compute_jacobians = [False if key in self.constant_param_keys
+                             else True for key in keys]
+
+        # Drop the residual if all the parameters used to compute it are
+        # being held constant
+        if any(compute_jacobians):
+            residual, jacobians = block.evaluate(params, compute_jacobians)
+            # Weight for iteratively reweighted least squares
+            sqrt_loss_weight = np.sqrt(loss.weight(residual))
+
+            for key, jac in zip(keys, jacobians):
+                if jac is not None:
+                    block_cidx = block_cidx_dict[key]
+                    # transposes needed for proper broadcasting
+                    HT_blocks[block_cidx][block_ridx] = sparse.csr_matrix(
+                        sqrt_loss_weight.T * jac.T)
+
+            e_blocks[block_ridx] = sqrt_loss_weight * residual
 
     def _do_line_search(self, dx):
         """Backtrack line search to optimize step size in a given direction."""
