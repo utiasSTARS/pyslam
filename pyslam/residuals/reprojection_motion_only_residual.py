@@ -27,6 +27,10 @@ def fast_se3_odot(vec, junk, out):
     out[2, 4] = -vec[0]
     out[2, 5] = 0.
 
+# @guvectorize([(float64[:], float64[:], float64[:, :])],
+#              '(n),(m)->(n,m)', nopython=True, cache=True, target='parallel')
+# def fast_stiffness_reweight(stiffness, reweight, out):
+
 
 class ReprojectionMotionOnlyResidual:
     """Frame to frame reprojection error for any kind of camera."""
@@ -96,8 +100,14 @@ class ReprojectionMotionOnlyBatchResidual:
                 odot_pt_cam2 = fast_se3_odot(pt_cam2, se3_odot_shape)
                 inner_jacob = stackmul(cam_jacobians, odot_pt_cam2)
 
+
                 #We must multiply all the Jacobians by a stiffness matrix
                 stiffness_repeats = np.asarray([self.stiffness]*self.num_pts) #Repeat the stiffness matrix (3,3) into a (N,3,3) matrix
+
+                #Optional: reweight stiffness according to KITTI heuristic                
+                reweights = 1/np.sqrt(np.abs(self.obs_2[:,0] -  self.camera.cu)/self.camera.cu + 0.05)
+                stiffness_repeats = np.multiply(stiffness_repeats, np.reshape(reweights, [self.num_pts,1,1]))
+
                 jacob = stackmul(stiffness_repeats, inner_jacob)
 
                 #Reshape back into a (3*N, 6) Jacobian
