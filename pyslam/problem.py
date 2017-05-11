@@ -302,16 +302,16 @@ class Problem:
             if any(compute_jacobians):
                 residual, jacobians = block.evaluate(params, compute_jacobians)
                 # Weight for iteratively reweighted least squares
-                loss_weight = np.sqrt(loss.weight(residual))
+                sqrt_loss_weight = np.sqrt(loss.weight(residual))
 
                 for key, jac in zip(keys, jacobians):
                     if jac is not None:
                         block_cidx = block_cidx_dict[key]
                         # transposes needed for proper broadcasting
                         HT_blocks[block_cidx][block_ridx] = sparse.csr_matrix(
-                            loss_weight.T * jac.T)
+                            sqrt_loss_weight.T * jac.T)
 
-                e_blocks[block_ridx] = loss_weight * residual
+                e_blocks[block_ridx] = sqrt_loss_weight * residual
 
         HT = sparse.bmat(HT_blocks, format='csr')
         e = np.squeeze(np.bmat(e_blocks).A)
