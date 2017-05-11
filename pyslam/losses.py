@@ -195,7 +195,7 @@ class TDistributionLoss:
            nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tdist_loss(k, x):
-    return 0.5 * (k + 1.) * np.log(1. + x**2 / k)
+    return 0.5 * (k + 1.) * np.log(1. + x * x / k)
 
 
 @vectorize([float32(float32, float32),
@@ -203,7 +203,7 @@ def _tdist_loss(k, x):
            nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tdist_infl(k, x):
-    return (k + 1.) * x / (k + x**2)
+    return (k + 1.) * x / (k + x * x)
 
 
 @vectorize([float32(float32, float32),
@@ -211,4 +211,4 @@ def _tdist_infl(k, x):
            nopython=True, cache=True,
            target=NUMBA_COMPILATION_TARGET)
 def _tdist_wght(k, x):
-    return (k + 1.) / (k + x**2)
+    return (k + 1.) / (k + x * x)

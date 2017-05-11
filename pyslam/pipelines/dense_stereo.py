@@ -81,7 +81,7 @@ class DenseStereoPipeline:
         self.motion_options.min_cost_decrease = 0.99
         self.motion_options.max_iters = 30
 
-        self.pyrlevels = 5
+        self.pyrlevels = 4
         """Number of image pyramid levels for coarse-to-fine optimization"""
         self.pyrlevel_sequence = list(range(self.pyrlevels))[1:]
         self.pyrlevel_sequence.reverse()
@@ -91,19 +91,19 @@ class DenseStereoPipeline:
         self.keyframe_rot_thresh = 0.3  # rad
         """Rotational distance threshold to drop new keyframes"""
 
-        self.intensity_stiffness = 1. / 0.02
+        self.intensity_stiffness = 1. / 0.01
         """Photometric measurement stiffness"""
-        self.disparity_stiffness = 1. / 0.25
+        self.disparity_stiffness = 1. / 0.5
         """Disparity measurement stiffness"""
-        self.min_grad = 0.05
+        self.min_grad = 0.1
         """Minimum image gradient magnitude to use a given pixel"""
 
-        # self.loss = L2Loss()
+        self.loss = L2Loss()
         # self.loss = HuberLoss(5.0)
         # self.loss = TukeyLoss(5.0)
         # self.loss = CauchyLoss(5.0)
         # self.loss = TDistributionLoss(5.0)  # Kerl et al. ICRA 2013
-        self.loss = TDistributionLoss(3.0)
+        # self.loss = TDistributionLoss(3.0)
         """Loss function"""
 
     def track(self, im_left, im_right, guess=None):
@@ -177,10 +177,9 @@ class DenseStereoPipeline:
                 residual, ['R_1_0', 't_1_0_1'], loss=self.loss)
             problem.initialize_params(params)
 
-            if pyrlevel > 2:
+            if pyrlevel > 1:
                 problem.set_parameters_constant('t_1_0_1')
-            else:
-                pass
+            # else:
                 # problem.set_parameters_constant('R_1_0')
 
             params = problem.solve()
