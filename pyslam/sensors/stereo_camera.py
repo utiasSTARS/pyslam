@@ -15,6 +15,10 @@ class StereoCamera:
         self.b = float(b)
         self.w = int(w)
         self.h = int(h)
+        self.K = np.array([[self.fu, 0., self.cu],
+                           [0., self.fv, self.cv],
+                           [0., 0., 1.]])
+        self.invK = np.linalg.inv(self.K)
 
     def is_valid_measurement(self, uvd):
         """Check if one or more uvd measurements is valid.

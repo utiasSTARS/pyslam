@@ -349,9 +349,8 @@ class Problem:
 
             for key, jac in zip(keys, jacobians):
                 if jac is not None:
-                    block_cidx = block_cidx_dict[key]
                     # transposes needed for proper broadcasting
-                    HT_blocks[block_cidx][block_ridx] = sparse.csr_matrix(
+                    HT_blocks[block_cidx_dict[key]][block_ridx] = sparse.csr_matrix(
                         sqrt_loss_weight.T * jac.T)
 
             e_blocks[block_ridx] = sqrt_loss_weight * residual

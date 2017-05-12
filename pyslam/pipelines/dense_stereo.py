@@ -6,7 +6,7 @@ import cv2
 from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
-from pyslam.residuals import PhotometricResidual
+from pyslam.residuals import PhotometricResidualSE3
 from pyslam.losses import TDistributionLoss, L2Loss
 
 
@@ -118,6 +118,7 @@ class DenseStereoPipeline:
         else:
             # Default behaviour for second frame and beyond
             trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels)
+            # trackframe.compute_jacobian()
 
             if guess is None:
                 # Default initial guess is previous pose relative to keyframe
@@ -163,14 +164,19 @@ class DenseStereoPipeline:
             pyr_camera.cv *= pyrfactor
             pyr_camera.h, pyr_camera.w = ref_frame.im_pyr[pyrlevel].shape
 
-            residual = PhotometricResidual(pyr_camera,
-                                           ref_frame.im_pyr[pyrlevel],
-                                           ref_frame.disparity[pyrlevel],
-                                           ref_frame.jacobian[pyrlevel],
-                                           track_frame.im_pyr[pyrlevel],
-                                           self.intensity_stiffness,
-                                           self.disparity_stiffness / pyrfactor,
-                                           self.min_grad)
+            im_jacobian = ref_frame.jacobian[pyrlevel]
+            # ESM
+            # im_jacobian = 0.5 * (ref_frame.jacobian[pyrlevel] +
+            #                      track_frame.jacobian[pyrlevel])
+
+            residual = PhotometricResidualSE3(pyr_camera,
+                                              ref_frame.im_pyr[pyrlevel],
+                                              ref_frame.disparity[pyrlevel],
+                                              track_frame.im_pyr[pyrlevel],
+                                              im_jacobian,
+                                              self.intensity_stiffness,
+                                              self.disparity_stiffness / pyrfactor,
+                                              self.min_grad)
 
             problem = Problem(self.motion_options)
             # problem.add_residual_block(residual, ['T_1_0'], loss=self.loss)
