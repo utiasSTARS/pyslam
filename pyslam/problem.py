@@ -1,5 +1,5 @@
 import copy
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 
 import numpy as np
 import scipy.sparse as sparse
@@ -63,6 +63,10 @@ class Problem:
         """Covariance matrix of final parameter estimates."""
         self._cost_history = []
         """History of cost values at each iteration of solve."""
+
+        self._thread_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.options.num_threads)
+        """Thread pool for parallel evaluations."""
 
     def add_residual_block(self, block, param_keys, loss=L2Loss()):
         """Add a cost block to the problem."""
@@ -293,17 +297,29 @@ class Problem:
         block_cidx_dict = dict(zip(self.param_dict.keys(),
                                    list(range(len(self.param_dict)))))
 
-        # Evaluate residual and jacobian blocks in parallel
-        with ThreadPoolExecutor(
-                max_workers=self.options.num_threads) as executor:
-
+        if self.options.num_threads > 1:
+            # Evaluate residual and jacobian blocks in parallel
+            threads = []
             for block_ridx, (block, keys, loss) in \
                 enumerate(zip(self.residual_blocks,
                               self.block_param_keys,
                               self.block_loss_functions)):
 
-                executor.submit(
+                threads.append(self._thread_pool.submit(
                     self._populate_residual_and_jacobian_blocks,
+                    HT_blocks, e_blocks,
+                    block_cidx_dict, block_ridx,
+                    block, keys, loss))
+
+            concurrent.futures.wait(threads)
+        else:
+            # Single thread: Call directly instead of submitting a job
+            for block_ridx, (block, keys, loss) in \
+                enumerate(zip(self.residual_blocks,
+                              self.block_param_keys,
+                              self.block_loss_functions)):
+
+                self._populate_residual_and_jacobian_blocks(
                     HT_blocks, e_blocks,
                     block_cidx_dict, block_ridx,
                     block, keys, loss)

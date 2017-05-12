@@ -69,7 +69,7 @@ def run_vo_kitti(basedir, outdir, date, drive, frames):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
 
-    segs = np.linspace(100, 800, 8)
+    segs = list(range(100, 801, 100))
     pos_gt = np.array([T.trans for T in tm.Twv_gt])
     pos_est = np.array([T.trans for T in tm.Twv_est])
 

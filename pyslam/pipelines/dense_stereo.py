@@ -80,6 +80,7 @@ class DenseStereoPipeline:
         self.motion_options.max_nondecreasing_steps = 5
         self.motion_options.min_cost_decrease = 0.99
         self.motion_options.max_iters = 30
+        self.motion_options.num_threads = 1
 
         self.pyrlevels = 4
         """Number of image pyramid levels for coarse-to-fine optimization"""
@@ -177,10 +178,10 @@ class DenseStereoPipeline:
                 residual, ['R_1_0', 't_1_0_1'], loss=self.loss)
             problem.initialize_params(params)
 
-            if pyrlevel > 1:
+            if pyrlevel > 2:
                 problem.set_parameters_constant('t_1_0_1')
             # else:
-                # problem.set_parameters_constant('R_1_0')
+            # problem.set_parameters_constant('R_1_0')
 
             params = problem.solve()
             # print(problem.summary(format='brief'))

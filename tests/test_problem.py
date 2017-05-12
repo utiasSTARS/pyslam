@@ -65,6 +65,7 @@ class TestBasic:
             + params_true['b'] * x_data + params_true['c']
 
         problem = Problem()
+        problem.options.num_threads = 1
         for x, y in zip(x_data, y_data):
             problem.add_residual_block(QuadraticResidual(
                 x, y, 1.), ['a', 'b', 'c'])
