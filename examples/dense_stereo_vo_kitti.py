@@ -14,7 +14,7 @@ import os
 import pickle
 
 
-def run_vo_kitti(basedir, outdir, date, drive, frames):
+def run_vo_kitti(basedir, outdir, date, drive, frames, outfile=None):
     # Load KITTI data
     dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 
@@ -51,66 +51,67 @@ def run_vo_kitti(basedir, outdir, date, drive, frames):
 
     # Compute errors
     T_w_c_est = [T.inv() for T in vo.T_c_w]
-
     tm = TrajectoryMetrics(T_w_c_gt, T_w_c_est)
 
-    trans_armse, rot_armse = tm.armse()
-    print('trans armse: {} meters'.format(trans_armse))
-    print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
+    # Save to file
+    if outfile:
+        print('Saving to {}'.format(outfile))
+        with open(outfile, 'wb') as f:
+            pickle.dump(tm, f, pickle.HIGHEST_PROTOCOL)
 
-    # Output to file
-    os.makedirs(outdir, exist_ok=True)
-    outfile = os.path.join(outdir, date + '_drive_' + drive + '.pickle')
+    return tm
 
-    with open(outfile, 'wb') as f:
-        pickle.dump(tm, f, pickle.HIGHEST_PROTOCOL)
 
-    # Make plots
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-
-    segs = list(range(100, 801, 100))
+def make_topdown_plot(tm, outfile=None):
     pos_gt = np.array([T.trans for T in tm.Twv_gt])
     pos_est = np.array([T.trans for T in tm.Twv_est])
 
-    f_err, ax_err = plt.subplots(1, 2, figsize=(12, 4))
-    f_traj, ax_traj = plt.subplots()
+    f, ax = plt.subplots()
 
-    plt.plot(pos_gt[:, 0], pos_gt[:, 1], '-k',
-             linewidth=2, label='Ground Truth')
+    ax.plot(pos_gt[:, 0], pos_gt[:, 1], '-k',
+            linewidth=2, label='Ground Truth')
+    ax.plot(pos_est[:, 0], pos_est[:, 1], label='VO')
 
-    ax_traj.plot(pos_est[:, 0], pos_est[:, 1], label='VO')
+    ax.axis('equal')
+    ax.minorticks_on()
+    ax.grid(which='both', linestyle=':', linewidth=0.2)
+    ax.set_title('Trajectory')
+    ax.set_xlabel('Easting (m)')
+    ax.set_ylabel('Northing (m)')
+    ax.legend()
 
+    if outfile:
+        print('Saving to {}'.format(outfile))
+        f.savefig(outfile)
+
+    return f, ax
+
+
+def make_segment_err_plot(tm, segs, outfile=None):
     segerr, avg_segerr = tm.segment_errors(segs)
 
-    ax_err[0].plot(avg_segerr[:, 0], avg_segerr[:, 1]
-                   * 100., '-s')
-    ax_err[1].plot(avg_segerr[:, 0], avg_segerr[:, 2]
-                   * 180. / np.pi, '-s')
+    f, ax = plt.subplots(1, 2, figsize=(12, 4))
 
-    ax_traj.axis('equal')
-    ax_traj.minorticks_on()
-    ax_traj.grid(which='both', linestyle=':', linewidth=0.2)
-    ax_traj.set_title('Trajectory')
-    ax_traj.set_xlabel('Easting (m)')
-    ax_traj.set_ylabel('Northing (m)')
-    ax_traj.legend()
+    ax[0].plot(avg_segerr[:, 0], avg_segerr[:, 1] * 100., '-s')
+    ax[1].plot(avg_segerr[:, 0], avg_segerr[:, 2] * 180. / np.pi, '-s')
 
-    ax_err[0].minorticks_on()
-    ax_err[0].grid(which='both', linestyle=':', linewidth=0.2)
-    ax_err[0].set_title('Translational error')
-    ax_err[0].set_xlabel('Sequence length (m)')
-    ax_err[0].set_ylabel('Average error (\%)')
+    ax[0].minorticks_on()
+    ax[0].grid(which='both', linestyle=':', linewidth=0.2)
+    ax[0].set_title('Translational error')
+    ax[0].set_xlabel('Sequence length (m)')
+    ax[0].set_ylabel('Average error (\%)')
 
-    ax_err[1].minorticks_on()
-    ax_err[1].grid(which='both', linestyle=':', linewidth=0.2)
-    ax_err[1].set_title('Rotational error')
-    ax_err[1].set_xlabel('Sequence length (m)')
-    ax_err[1].set_ylabel('Average error (deg/m)')
+    ax[1].minorticks_on()
+    ax[1].grid(which='both', linestyle=':', linewidth=0.2)
+    ax[1].set_title('Rotational error')
+    ax[1].set_xlabel('Sequence length (m)')
+    ax[1].set_ylabel('Average error (deg/m)')
 
-    f_err.savefig(os.path.join(outdir, date + '_drive_' + drive + '_err.pdf'))
-    f_traj.savefig(os.path.join(
-        outdir, date + '_drive_' + drive + '_traj.pdf'))
+    if outfile:
+        print('Saving to {}'.format(outfile))
+        f.savefig(outfile)
+
+    return f, ax
 
 
 def main():
@@ -131,6 +132,10 @@ def main():
 
     basedir = '/Users/leeclement/Desktop/KITTI/raw/'
     outdir = '/Users/leeclement/Desktop/pyslam/KITTI/'
+    os.makedirs(outdir, exist_ok=True)
+
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
 
     seqs = {'00': {'date': '2011_10_03',
                    'drive': '0027',
@@ -167,9 +172,28 @@ def main():
         date = val['date']
         drive = val['drive']
         frames = val['frames']
+        if key is not '04':
+            continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
-        run_vo_kitti(basedir, outdir, date, drive, frames)
+        outfile = os.path.join(outdir, date + '_drive_' + drive + '.pickle')
+        tm = run_vo_kitti(basedir, outdir, date, drive, frames, outfile)
+
+        # Compute errors
+        trans_armse, rot_armse = tm.armse()
+        print('trans armse: {} meters'.format(trans_armse))
+        print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
+
+        # Make segment error plots
+        outfile = os.path.join(
+            outdir, date + '_drive_' + drive + '_err.pdf')
+        segs = list(range(100, 801, 100))
+        make_segment_err_plot(tm, segs, outfile)
+
+        # Make trajectory plots
+        outfile = os.path.join(
+            outdir, date + '_drive_' + drive + '_traj.pdf')
+        make_topdown_plot(tm, outfile)
 
 
 main()
