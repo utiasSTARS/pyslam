@@ -4,15 +4,14 @@ from numba import guvectorize, float32, float64, boolean
 NUMBA_COMPILATION_TARGET = 'parallel'
 
 
-class StereoCamera:
-    """Pinhole stereo camera model with the origin in left camera."""
+class RGBDCamera:
+    """Pinhole RGB-D camera model."""
 
-    def __init__(self, cu, cv, fu, fv, b, w, h):
+    def __init__(self, cu, cv, fu, fv, w, h):
         self.cu = float(cu)
         self.cv = float(cv)
         self.fu = float(fu)
         self.fv = float(fv)
-        self.b = float(b)
         self.w = int(w)
         self.h = int(h)
         self.K = np.array([[self.fu, 0., self.cu],
@@ -20,16 +19,16 @@ class StereoCamera:
                            [0., 0., 1.]])
         self.invK = np.linalg.inv(self.K)
 
-    def is_valid_measurement(self, uvd):
-        """Check if one or more uvd measurements is valid.
+    def is_valid_measurement(self, uvz):
+        """Check if one or more uvz measurements is valid.
            Returns indices of valid measurements.
         """
-        uvd = np.atleast_2d(uvd)
+        uvz = np.atleast_2d(uvz)
 
-        if not uvd.shape[1] == 3:
-            raise ValueError("uvd must have shape (3,) or (N,3)")
+        if not uvz.shape[1] == 3:
+            raise ValueError("uvz must have shape (3,) or (N,3)")
 
-        return _stereo_validate(uvd, [self.w, self.h])
+        return _rgbd_validate(uvz, [self.w, self.h])
 
     def project(self, pt_c, compute_jacobians=None):
         """Project 3D point(s) in the sensor frame into (u,v,d) coordinates."""
@@ -41,31 +40,31 @@ class StereoCamera:
             raise ValueError("pt_c must have shape (3,) or (N,3)")
 
         # Now do the actual math
-        params = self.cu, self.cv, self.fu, self.fv, self.b
-        uvd = _stereo_project(pt_c, params)
+        params = self.cu, self.cv, self.fu, self.fv
+        uvz = _rgbd_project(pt_c, params)
 
         if compute_jacobians:
-            jacobians = _stereo_project_jacobian(pt_c, params)
+            jacobians = _rgbd_project_jacobian(pt_c, params)
 
-            return np.squeeze(uvd), np.squeeze(jacobians)
+            return np.squeeze(uvz), np.squeeze(jacobians)
 
-        return np.squeeze(uvd)
+        return np.squeeze(uvz)
 
-    def triangulate(self, uvd, compute_jacobians=None):
+    def triangulate(self, uvz, compute_jacobians=None):
         """Triangulate 3D point(s) in the sensor frame from (u,v,d)."""
         # Convert to 2D array if it's just a single point
         # We'll remove any singleton dimensions at the end.
-        uvd = np.atleast_2d(uvd)
+        uvz = np.atleast_2d(uvz)
 
-        if not uvd.shape[1] == 3:
-            raise ValueError("uvd must have shape (3,) or (N,3)")
+        if not uvz.shape[1] == 3:
+            raise ValueError("uvz must have shape (3,) or (N,3)")
 
         # Now do the actual math
-        params = self.cu, self.cv, self.fu, self.fv, self.b
-        pt_c = _stereo_triangulate(uvd, params)
+        params = self.cu, self.cv, self.fu, self.fv
+        pt_c = _rgbd_triangulate(uvz, params)
 
         if compute_jacobians:
-            jacobians = _stereo_triangulate_jacobian(uvd, params)
+            jacobians = _rgbd_triangulate_jacobian(uvz, params)
 
             return np.squeeze(pt_c), np.squeeze(jacobians)
 
@@ -76,37 +75,36 @@ class StereoCamera:
                "  b: {:f}\n  w: {:d}\n  h: {:d}\n".format(self.__class__.__name__,
                                                           self.cu, self.cv,
                                                           self.fu, self.fv,
-                                                          self.b,
                                                           self.w, self.h)
 
 
 @guvectorize([(float32[:], float32[:], boolean[:]),
               (float64[:], float64[:], boolean[:])],
              '(n),(m)->()', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_validate(uvd, imshape, out):
+def _rgbd_validate(uvz, imshape, out):
     w, h = imshape
-    out[0] = (uvd[2] > 0.) & (uvd[2] < w) & \
-        (uvd[1] > 0.) & (uvd[1] < h) & \
-        (uvd[0] > 0.) & (uvd[0] < w)
+    out[0] = (uvz[2] > 0.) & \
+        (uvz[1] > 0.) & (uvz[1] < h) & \
+        (uvz[0] > 0.) & (uvz[0] < w)
 
 
 @guvectorize([(float32[:], float32[:], float32[:]),
               (float64[:], float64[:], float64[:])],
              '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_project(pt_c, params, out):
-    cu, cv, fu, fv, b = params
+def _rgbd_project(pt_c, params, out):
+    cu, cv, fu, fv = params
 
     one_over_z = 1. / pt_c[2]
     out[0] = fu * pt_c[0] * one_over_z + cu
     out[1] = fv * pt_c[1] * one_over_z + cv
-    out[2] = fu * b * one_over_z
+    out[2] = pt_c[2]
 
 
 @guvectorize([(float32[:], float32[:], float32[:, :]),
               (float64[:], float64[:], float64[:, :])],
              '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_project_jacobian(pt_c, params, out):
-    cu, cv, fu, fv, b = params
+def _rgbd_project_jacobian(pt_c, params, out):
+    cu, cv, fu, fv = params
 
     one_over_z = 1. / pt_c[2]
     one_over_z2 = one_over_z * one_over_z
@@ -124,44 +122,40 @@ def _stereo_project_jacobian(pt_c, params, out):
     # d(d) / d(pt_c)
     out[2, 0] = 0.
     out[2, 1] = 0.
-    out[2, 2] = -fu * b * one_over_z2
+    out[2, 2] = 1.
 
 
 @guvectorize([(float32[:], float32[:], float32[:]),
               (float64[:], float64[:], float64[:])],
              '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_triangulate(uvd, params, out):
-    cu, cv, fu, fv, b = params
+def _rgbd_triangulate(uvz, params, out):
+    cu, cv, fu, fv = params
 
-    b_over_d = b / uvd[2]
-    fu_over_fv = fu / fv
-
-    out[0] = (uvd[0] - cu) * b_over_d
-    out[1] = (uvd[1] - cv) * b_over_d * fu_over_fv
-    out[2] = fu * b_over_d
+    out[0] = (uvz[0] - cu) * uvz[2] / fu
+    out[1] = (uvz[1] - cv) * uvz[2] / fv
+    out[2] = uvz[2]
 
 
 @guvectorize([(float32[:], float32[:], float32[:, :]),
               (float64[:], float64[:], float64[:, :])],
              '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_triangulate_jacobian(uvd, params, out):
-    cu, cv, fu, fv, b = params
+def _rgbd_triangulate_jacobian(uvz, params, out):
+    cu, cv, fu, fv = params
 
-    b_over_d = b / uvd[2]
-    b_over_d2 = b_over_d / uvd[2]
-    fu_over_fv = fu / fv
+    one_over_fu = 1. / fu
+    one_over_fv = 1. / fv
 
-    # d(x) / d(uvd)
-    out[0, 0] = b_over_d
+    # d(x) / d(uvz)
+    out[0, 0] = uvz[2] * one_over_fu
     out[0, 1] = 0.
-    out[0, 2] = (cu - uvd[0]) * b_over_d2
+    out[0, 2] = (uvz[0] - cu) * one_over_fu
 
-    # d(y) / d(uvd)
+    # d(y) / d(uvz)
     out[1, 0] = 0.
-    out[1, 1] = b_over_d * fu_over_fv
-    out[1, 2] = (cv - uvd[1]) * b_over_d2 * fu_over_fv
+    out[1, 1] = uvz[2] * one_over_fv
+    out[1, 2] = (uvz[1] - cv) * one_over_fv
 
-    # d(z) / d(uvd)
+    # d(z) / d(uvz)
     out[2, 0] = 0.
     out[2, 1] = 0.
-    out[2, 2] = -fu * b_over_d2
+    out[2, 2] = 1.
