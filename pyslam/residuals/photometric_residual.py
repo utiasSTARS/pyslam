@@ -186,13 +186,13 @@ class PhotometricResidualSE3:
         im_proj_jac = stackmul(self.im_jac[:, np.newaxis, :],
                                project_jac[:, 0:2, :])  # Nx1x3
         temp = stackmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
-        im_disp_jac = stackmul(temp, self.triang_jac[:, :, 2:3])  # Nx1x1
+        im_disp_jac = np.squeeze(stackmul(temp, self.triang_jac[:, :, 2:3])).compress(
+            valid_pixels, axis=0)  # Nx1x1
 
         # Compute the overall stiffness
         # \sigma^2 = \sigma^2_I + J_d \sigma^2_d J_d^T
         stiffness = 1. / np.sqrt(self.intensity_covar +
-                                 self.disparity_covar * np.squeeze(
-                                     im_disp_jac.compress(valid_pixels, axis=0))**2)
+                                 self.disparity_covar * im_disp_jac * im_disp_jac)
         # stiffness = self.intensity_stiffness
         residual = stiffness * residual
 
@@ -207,9 +207,9 @@ class PhotometricResidualSE3:
                 # This is actually faster than filtering the intermediate
                 # results!
                 odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
-                jac = stackmul(im_proj_jac, odot_pt_track).compress(
+                jac = np.squeeze(stackmul(im_proj_jac, odot_pt_track)).compress(
                     valid_pixels, axis=0)
-                jac = (stiffness * np.squeeze(jac.T)).T
+                jac = (stiffness * jac.T).T
 
             if len(params) == 1:
                 # SE3 case

@@ -130,38 +130,39 @@ class Problem:
         """Solve the problem using Gauss - Newton."""
         self._update_partition_dict = self._get_update_partition_dict()
 
-        optimization_iters = 0
-        dx = np.array([100])
         cost = self.eval_cost()
+        dx = np.array([100])
+
+        optimization_iters = 0
         nondecreasing_steps_taken = 0
+        self._cost_history = [cost]
 
         done_optimization = False
-        self._cost_history = [cost]
 
         while not done_optimization:
             optimization_iters += 1
             prev_cost = cost
 
-            if self.options.allow_nondecreasing_steps and \
-                    nondecreasing_steps_taken == 0:
-                best_params = copy.deepcopy(self.param_dict)
-
-            dx = self.solve_one_iter()
+            dx, cost = self.solve_one_iter()
             # print("Update vector:\n", str(dx))
             # print("Update norm = %f" % np.linalg.norm(dx))
+
+            # Update cost history
+            self._cost_history.append(cost)
 
             # Update parameters
             for k, r in self._update_partition_dict.items():
                 self._perturb_by_key(k, dx[r])
 
             # Check if done optimizing
-            cost = self.eval_cost()
-
             done_optimization = optimization_iters > self.options.max_iters or \
                 np.linalg.norm(dx) < self.options.min_update_norm or \
                 cost < self.options.min_cost
 
             if self.options.allow_nondecreasing_steps:
+                if nondecreasing_steps_taken == 0:
+                    best_params = copy.deepcopy(self.param_dict)
+
                 if cost >= self.options.min_cost_decrease * prev_cost:
                     nondecreasing_steps_taken += 1
                 else:
@@ -175,27 +176,27 @@ class Problem:
                 done_optimization = done_optimization or \
                     cost >= self.options.min_cost_decrease * prev_cost
 
-            # Update cost history
-            self._cost_history.append(cost)
-
         return self.param_dict
 
     def solve_one_iter(self):
         """Solve one iteration of Gauss-Newton."""
         # precision * dx = information
-        precision, information = self._build_precision_and_information()
+        precision, information, cost = self._get_precision_information_and_cost()
         dx = splinalg.spsolve(precision, information)
 
         # Backtrack line search
-        best_step_size = self._do_line_search(dx)
+        if self.options.linesearch_max_iters > 0:
+            best_step_size, best_cost = self._do_line_search(dx)
+        else:
+            best_step_size, best_cost = 1., cost
 
-        return best_step_size * dx
+        return best_step_size * dx, best_cost
 
     def compute_covariance(self):
         """Compute the covariance matrix after solve has terminated."""
         try:
             # Re-evaluate the precision matrix with the final parameters
-            precision, _ = self._build_precision_and_information()
+            precision, _, _ = self._get_precision_information_and_cost()
             self._covariance_matrix = splinalg.inv(precision.tocsc()).toarray()
         except Exception as e:
             print('Covariance computation failed!\n{}'.format(e))
@@ -274,8 +275,8 @@ class Problem:
 
         return update_partition_dict
 
-    def _build_precision_and_information(self):
-        """Helper function to build the precision matrix and information vector for the Gauss - Newton update."""
+    def _get_precision_information_and_cost(self):
+        """Helper function to build the precision matrix and information vector for the Gauss - Newton update. Also returns the total cost."""
         # The Gauss-Newton step is given by
         # (H.T * W * H) dx = -H.T * W * e
         # or
@@ -293,6 +294,7 @@ class Problem:
         HT_blocks = [[None for _ in self.residual_blocks]
                      for _ in self.param_dict]
         e_blocks = [None for _ in self.residual_blocks]
+        cost_blocks = [None for _ in self.residual_blocks]
 
         block_cidx_dict = dict(zip(self.param_dict.keys(),
                                    list(range(len(self.param_dict)))))
@@ -306,8 +308,8 @@ class Problem:
                               self.block_loss_functions)):
 
                 threads.append(self._thread_pool.submit(
-                    self._populate_residual_and_jacobian_blocks,
-                    HT_blocks, e_blocks,
+                    self._populate_residual_jacobian_and_cost_blocks,
+                    HT_blocks, e_blocks, cost_blocks,
                     block_cidx_dict, block_ridx,
                     block, keys, loss))
 
@@ -319,8 +321,8 @@ class Problem:
                               self.block_param_keys,
                               self.block_loss_functions)):
 
-                self._populate_residual_and_jacobian_blocks(
-                    HT_blocks, e_blocks,
+                self._populate_residual_jacobian_and_cost_blocks(
+                    HT_blocks, e_blocks, cost_blocks,
                     block_cidx_dict, block_ridx,
                     block, keys, loss)
 
@@ -329,13 +331,14 @@ class Problem:
 
         precision = HT.dot(HT.T)
         information = -HT.dot(e)
+        cost = np.sum(np.array(cost_blocks))
 
-        return precision, information
+        return precision, information, cost
 
-    def _populate_residual_and_jacobian_blocks(self,
-                                               HT_blocks, e_blocks,
-                                               block_cidx_dict, block_ridx,
-                                               block, keys, loss):
+    def _populate_residual_jacobian_and_cost_blocks(self,
+                                                    HT_blocks, e_blocks, cost_blocks,
+                                                    block_cidx_dict, block_ridx,
+                                                    block, keys, loss):
         params = [self.param_dict[key] for key in keys]
         compute_jacobians = [False if key in self.constant_param_keys
                              else True for key in keys]
@@ -350,9 +353,10 @@ class Problem:
             for key, jac in zip(keys, jacobians):
                 if jac is not None:
                     # transposes needed for proper broadcasting
-                    HT_blocks[block_cidx_dict[key]][block_ridx] = sparse.csr_matrix(
-                        sqrt_loss_weight.T * jac.T)
+                    HT_blocks[block_cidx_dict[key]][block_ridx] = \
+                        sparse.csr_matrix(sqrt_loss_weight.T * jac.T)
 
+            cost_blocks[block_ridx] = np.sum(loss.loss(residual))
             e_blocks[block_ridx] = sqrt_loss_weight * residual
 
     def _do_line_search(self, dx):
@@ -362,9 +366,7 @@ class Problem:
         best_cost = np.inf
 
         iters = 0
-        # Do nothing if linesearch_max_iters <= 0
-        done_linesearch = iters <= self.options.linesearch_max_iters
-
+        done_linesearch = False
         while not done_linesearch:
             iters += 1
             test_params = copy.deepcopy(self.param_dict)
@@ -393,7 +395,7 @@ class Problem:
         # print("Best step size: %f" % best_step_size)
         # print("Best cost: %f" % best_cost)
 
-        return best_step_size
+        return best_step_size, best_cost
 
     def _perturb_by_key(self, key, dx, param_dict=None):
         """Helper function to update a parameter given an update vector."""

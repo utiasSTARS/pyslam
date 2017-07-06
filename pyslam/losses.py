@@ -8,7 +8,7 @@ NUMBA_COMPILATION_TARGET = 'parallel'
 class L2Loss:
 
     def loss(self, x):
-        return 0.5 * x**2
+        return 0.5 * x * x
 
     def influence(self, x):
         return x
@@ -94,7 +94,7 @@ class HuberLoss:
 def _huber_loss(k, x):
     abs_x = np.abs(x)
     if abs_x <= k:
-        return 0.5 * x**2
+        return 0.5 * x * x
     else:
         return k * (abs_x - 0.5 * k)
 

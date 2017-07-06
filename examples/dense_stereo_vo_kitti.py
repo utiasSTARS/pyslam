@@ -139,41 +139,43 @@ def main():
 
     seqs = {'00': {'date': '2011_10_03',
                    'drive': '0027',
-                   'frames': range(0, 4540)},
+                   'frames': range(0, 4541)},
             '01': {'date': '2011_10_03',
                    'drive': '0042',
-                   'frames': range(0, 1100)},
+                   'frames': range(0, 1101)},
             '02': {'date': '2011_10_03',
                    'drive': '0034',
-                   'frames': range(0, 4660)},
+                   'frames': range(0, 4661)},
             '04': {'date': '2011_09_30',
                    'drive': '0016',
-                   'frames': range(0, 270)},
+                   'frames': range(0, 271)},
             '05': {'date': '2011_09_30',
                    'drive': '0018',
-                   'frames': range(0, 2760)},
+                   'frames': range(0, 2761)},
             '06': {'date': '2011_09_30',
                    'drive': '0020',
-                   'frames': range(0, 1100)},
+                   'frames': range(0, 1101)},
             '07': {'date': '2011_09_30',
                    'drive': '0027',
-                   'frames': range(0, 1100)},
+                   'frames': range(0, 1101)},
             '08': {'date': '2011_09_30',
                    'drive': '0028',
-                   'frames': range(1100, 5170)},
+                   'frames': range(1100, 5171)},
             '09': {'date': '2011_09_30',
                    'drive': '0033',
-                   'frames': range(0, 1590)},
+                   'frames': range(0, 1591)},
             '10': {'date': '2011_09_30',
                    'drive': '0034',
-                   'frames': range(0, 1200)}}
+                   'frames': range(0, 1201)}}
 
     for key, val in seqs.items():
         date = val['date']
         drive = val['drive']
         frames = val['frames']
-        if key is not '04':
-            continue
+
+        # frames = range(0, 100)
+        # if key is not '00':
+        #     continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
         outfile = os.path.join(outdir, date + '_drive_' + drive + '.pickle')
@@ -196,4 +198,5 @@ def main():
         make_topdown_plot(tm, outfile)
 
 
+# Do the thing
 main()

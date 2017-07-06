@@ -7,7 +7,7 @@ from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
 from pyslam.residuals import PhotometricResidualSE3
-from pyslam.losses import TDistributionLoss, L2Loss
+from pyslam.losses import TDistributionLoss, L2Loss, HuberLoss
 
 
 class DenseKeyframe:
@@ -81,6 +81,7 @@ class DenseStereoPipeline:
         self.motion_options.min_cost_decrease = 0.99
         self.motion_options.max_iters = 30
         self.motion_options.num_threads = 1
+        self.motion_options.linesearch_max_iters = 0
 
         self.pyrlevels = 4
         """Number of image pyramid levels for coarse-to-fine optimization"""
@@ -99,8 +100,8 @@ class DenseStereoPipeline:
         self.min_grad = 0.1
         """Minimum image gradient magnitude to use a given pixel"""
 
-        self.loss = L2Loss()
-        # self.loss = HuberLoss(5.0)
+        # self.loss = L2Loss()
+        self.loss = HuberLoss(10.0)
         # self.loss = TukeyLoss(5.0)
         # self.loss = CauchyLoss(5.0)
         # self.loss = TDistributionLoss(5.0)  # Kerl et al. ICRA 2013
@@ -184,7 +185,7 @@ class DenseStereoPipeline:
                 residual, ['R_1_0', 't_1_0_1'], loss=self.loss)
             problem.initialize_params(params)
 
-            if pyrlevel > 2:
+            if pyrlevel > 1:
                 problem.set_parameters_constant('t_1_0_1')
             # else:
             # problem.set_parameters_constant('R_1_0')
