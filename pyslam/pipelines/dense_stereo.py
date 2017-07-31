@@ -185,7 +185,7 @@ class DenseStereoPipeline:
                 residual, ['R_1_0', 't_1_0_1'], loss=self.loss)
             problem.initialize_params(params)
 
-            if pyrlevel > 1:
+            if pyrlevel > 2:
                 problem.set_parameters_constant('t_1_0_1')
             # else:
             # problem.set_parameters_constant('R_1_0')

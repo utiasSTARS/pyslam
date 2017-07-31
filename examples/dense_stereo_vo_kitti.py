@@ -15,7 +15,7 @@ import time
 import os
 
 
-def run_vo_kitti(basedir, outdir, date, drive, frames, outfile=None):
+def run_vo_kitti(basedir, date, drive, frames, outfile=None):
     # Load KITTI data
     dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 
@@ -174,12 +174,12 @@ def main():
         frames = val['frames']
 
         # frames = range(0, 300)
-        # if key is not '00':
+        # if key is not '06':
         #     continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
-        outfile = os.path.join(outdir, date + '_drive_' + drive + '.mat')
-        tm = run_vo_kitti(basedir, outdir, date, drive, frames, outfile)
+        outfile = os.path.join(outdir, key + '.mat')
+        tm = run_vo_kitti(basedir, date, drive, frames, outfile)
 
         # Compute errors
         trans_armse, rot_armse = tm.armse()
@@ -187,14 +187,12 @@ def main():
         print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
 
         # Make segment error plots
-        outfile = os.path.join(
-            outdir, date + '_drive_' + drive + '_err.pdf')
+        outfile = os.path.join(outdir, key + '_err.pdf')
         segs = list(range(100, 801, 100))
         make_segment_err_plot(tm, segs, outfile)
 
         # Make trajectory plots
-        outfile = os.path.join(
-            outdir, date + '_drive_' + drive + '_traj.pdf')
+        outfile = os.path.join(outdir, key + '_traj.pdf')
         make_topdown_plot(tm, outfile)
 
 
