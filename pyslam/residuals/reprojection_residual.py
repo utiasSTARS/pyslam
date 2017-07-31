@@ -13,7 +13,7 @@ class ReprojectionResidual:
     def evaluate(self, params, compute_jacobians=None):
         T_cam_w = params[0]
         pt_w = params[1]
-        pt_cam = T_cam_w * pt_w
+        pt_cam = T_cam_w.dot(pt_w)
 
         if compute_jacobians:
             jacobians = [None for _ in enumerate(params)]

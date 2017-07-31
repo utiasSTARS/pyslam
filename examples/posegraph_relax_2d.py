@@ -12,23 +12,23 @@ T_1_0_true = SE2.identity()
 T_2_0_true = SE2(SO2.identity(), -np.array([0.5, 0]))
 T_3_0_true = SE2(SO2.identity(), -np.array([1, 0]))
 T_4_0_true = SE2(SO2.from_angle(np.pi / 2),
-                 -(SO2.from_angle(np.pi / 2) * np.array([1, 0.5])))
+                 -(SO2.from_angle(np.pi / 2).dot(np.array([1, 0.5]))))
 T_5_0_true = SE2(SO2.from_angle(np.pi), -
-                 (SO2.from_angle(np.pi) * np.array([0.5, 0.5])))
+                 (SO2.from_angle(np.pi).dot(np.array([0.5, 0.5]))))
 T_6_0_true = SE2(SO2.from_angle(-np.pi / 2),
-                 -(SO2.from_angle(-np.pi / 2) * np.array([0.5, 0])))
+                 -(SO2.from_angle(-np.pi / 2).dot(np.array([0.5, 0]))))
 # T_6_0_true = copy.deepcopy(T_2_0_true)
 
 # Odometry
 T_1_0_obs = SE2.identity()
-T_2_1_obs = T_2_0_true * T_1_0_true.inv()
-T_3_2_obs = T_3_0_true * T_2_0_true.inv()
-T_4_3_obs = T_4_0_true * T_3_0_true.inv()
-T_5_4_obs = T_5_0_true * T_4_0_true.inv()
-T_6_5_obs = T_6_0_true * T_5_0_true.inv()
+T_2_1_obs = T_2_0_true.dot(T_1_0_true.inv())
+T_3_2_obs = T_3_0_true.dot(T_2_0_true.inv())
+T_4_3_obs = T_4_0_true.dot(T_3_0_true.inv())
+T_5_4_obs = T_5_0_true.dot(T_4_0_true.inv())
+T_6_5_obs = T_6_0_true.dot(T_5_0_true.inv())
 
 # Loop closure
-T_6_2_obs = T_6_0_true * T_2_0_true.inv()
+T_6_2_obs = T_6_0_true.dot(T_2_0_true.inv())
 
 # Random start
 # T_1_0_init = SE2.exp(0.1 * 2 * (np.random.rand(3) - 0.5)) * T_1_0_true
@@ -42,11 +42,11 @@ T_6_2_obs = T_6_0_true * T_2_0_true.inv()
 offset1 = np.array([-0.1, 0.1, -0.1])
 offset2 = np.array([0.1, -0.1, 0.1])
 T_1_0_init = T_1_0_true
-T_2_0_init = SE2.exp(offset1) * T_2_0_true
-T_3_0_init = SE2.exp(offset2) * T_3_0_true
-T_4_0_init = SE2.exp(offset1) * T_4_0_true
-T_5_0_init = SE2.exp(offset2) * T_5_0_true
-T_6_0_init = SE2.exp(offset1) * T_6_0_true
+T_2_0_init = SE2.exp(offset1).dot(T_2_0_true)
+T_3_0_init = SE2.exp(offset2).dot(T_3_0_true)
+T_4_0_init = SE2.exp(offset1).dot(T_4_0_true)
+T_5_0_init = SE2.exp(offset2).dot(T_5_0_true)
+T_6_0_init = SE2.exp(offset1).dot(T_6_0_true)
 
 
 # Either we need a prior on the first pose, or it needs to be held constant
@@ -107,11 +107,11 @@ print(problem.summary(format='full'))
 print("Initial Error:")
 for key in params_true.keys():
     print('{}: {}'.format(key, SE2.log(
-        params_init[key].inv() * params_true[key])))
+        params_init[key].inv().dot(params_true[key]))))
 
 print()
 
 print("Final Error:")
 for key in params_true.keys():
     print('{}: {}'.format(key, SE2.log(
-        params_final[key].inv() * params_true[key])))
+        params_final[key].inv().dot(params_true[key]))))

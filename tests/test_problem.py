@@ -4,6 +4,8 @@ import pytest
 from pyslam.problem import Options, Problem
 from pyslam.utils import invsqrt
 
+np.random.seed(42)
+
 
 class TestBasic:
 
@@ -87,11 +89,11 @@ class TestPoseGraphRelax:
             'T_1_w': SE2(SO2.identity(), -np.array([0.5, 0])),
             'T_2_w': SE2(SO2.identity(), -np.array([1, 0])),
             'T_3_w': SE2(SO2.from_angle(np.pi / 2),
-                         -(SO2.from_angle(np.pi / 2) * np.array([1, 0.5]))),
+                         -(SO2.from_angle(np.pi / 2).dot(np.array([1, 0.5])))),
             'T_4_w': SE2(SO2.from_angle(np.pi), -
-                         (SO2.from_angle(np.pi) * np.array([0.5, 0.5]))),
+                         (SO2.from_angle(np.pi).dot(np.array([0.5, 0.5])))),
             'T_5_w': SE2(SO2.from_angle(-np.pi / 2),
-                         -(SO2.from_angle(-np.pi / 2) * np.array([0.5, 0])))
+                         -(SO2.from_angle(-np.pi / 2).dot(np.array([0.5, 0]))))
         }
         return T_k_w
 
@@ -102,11 +104,11 @@ class TestPoseGraphRelax:
         offset2 = SE2.exp([0.1, -0.1, 0.1])
         T_k_w = {
             'T_0_w': poses_true['T_0_w'],
-            'T_1_w': offset1 * poses_true['T_1_w'],
-            'T_2_w': offset2 * poses_true['T_2_w'],
-            'T_3_w': offset1 * poses_true['T_3_w'],
-            'T_4_w': offset2 * poses_true['T_4_w'],
-            'T_5_w': offset1 * poses_true['T_5_w'],
+            'T_1_w': offset1.dot(poses_true['T_1_w']),
+            'T_2_w': offset2.dot(poses_true['T_2_w']),
+            'T_3_w': offset1.dot(poses_true['T_3_w']),
+            'T_4_w': offset2.dot(poses_true['T_4_w']),
+            'T_5_w': offset1.dot(poses_true['T_5_w']),
         }
         return T_k_w
 
@@ -114,12 +116,12 @@ class TestPoseGraphRelax:
     def odometry(self, poses_true):
         T_obs = {
             'T_0_w': poses_true['T_0_w'],
-            'T_1_0': poses_true['T_1_w'] * poses_true['T_0_w'].inv(),
-            'T_2_1': poses_true['T_2_w'] * poses_true['T_1_w'].inv(),
-            'T_3_2': poses_true['T_3_w'] * poses_true['T_2_w'].inv(),
-            'T_4_3': poses_true['T_4_w'] * poses_true['T_3_w'].inv(),
-            'T_5_4': poses_true['T_5_w'] * poses_true['T_4_w'].inv(),
-            'T_5_1': poses_true['T_5_w'] * poses_true['T_1_w'].inv()
+            'T_1_0': poses_true['T_1_w'].dot(poses_true['T_0_w'].inv()),
+            'T_2_1': poses_true['T_2_w'].dot(poses_true['T_1_w'].inv()),
+            'T_3_2': poses_true['T_3_w'].dot(poses_true['T_2_w'].inv()),
+            'T_4_3': poses_true['T_4_w'].dot(poses_true['T_3_w'].inv()),
+            'T_5_4': poses_true['T_5_w'].dot(poses_true['T_4_w'].inv()),
+            'T_5_1': poses_true['T_5_w'].dot(poses_true['T_1_w'].inv())
         }
         return T_obs
 
@@ -169,7 +171,7 @@ class TestPoseGraphRelax:
         poses_final = problem.solve()
         for key in poses_true.keys():
             assert np.linalg.norm(
-                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
+                SE2.log(poses_final[key].inv().dot(poses_true[key]))) < 1e-4
 
     def test_first_pose_prior(self, options, residuals, residual_params,
                               poses_init, poses_true):
@@ -181,7 +183,7 @@ class TestPoseGraphRelax:
         poses_final = problem.solve()
         for key in poses_true.keys():
             assert np.linalg.norm(
-                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
+                SE2.log(poses_final[key].inv().dot(poses_true[key]))) < 1e-4
 
     def test_loop_closure(self, options, residuals, residual_params,
                           poses_init, poses_true):
@@ -193,7 +195,7 @@ class TestPoseGraphRelax:
         poses_final = problem.solve()
         for key in poses_true.keys():
             assert np.linalg.norm(
-                SE2.log(poses_final[key].inv() * poses_true[key])) < 1e-4
+                SE2.log(poses_final[key].inv().dot(poses_true[key]))) < 1e-4
 
 
 class TestBundleAdjust:
@@ -232,7 +234,7 @@ class TestBundleAdjust:
 
     @pytest.fixture
     def observations(self, camera, points, poses):
-        return [[camera.project(T * p) for p in points] for T in poses]
+        return [[camera.project(T.dot(p)) for p in points] for T in poses]
 
     def test_bundle_adjust(self, options, camera, points, poses, observations):
         from liegroups import SE3
@@ -273,7 +275,7 @@ class TestBundleAdjust:
             p_true = params_true[key]
 
             if isinstance(p_est, SE3):
-                err = SE3.log(p_est.inv() * p_true)
+                err = SE3.log(p_est.inv().dot(p_true))
             else:
                 err = p_est - p_true
 

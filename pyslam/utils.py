@@ -14,8 +14,6 @@ def invsqrt(x):
 
 
 def bilinear_interpolate(im, x, y):
-    # import ipdb
-    # ipdb.set_trace()
     im = np.atleast_3d(im)
     out = np.empty((len(x), im.shape[2]))
 
@@ -57,7 +55,7 @@ def _bilinear_interpolate(im, x, y, out):
     wd = (x - x0) * (y - y0)
 
     # Clip to image boundaries and sample
-    # NB: at the boundaries this is equivalent to duplicating the last row and column
+    # NB: at the boundaries this is equivalent to duplicating the first/last row and column
     x0 = x_min if x0 < x_min else x0
     x0 = x_max if x0 > x_max else x0
 

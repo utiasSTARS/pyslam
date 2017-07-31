@@ -21,9 +21,10 @@ class TestQuadraticResidual:
     def test_jacobians(self, residual):
         params = [1., -2., 3.]
         expected_jac = [4., 2., 1.]
-        _, jac1 = residual.evaluate(params, compute_jacobians=[True, True, True])
+        _, jac1 = residual.evaluate(
+            params, compute_jacobians=[True, True, True])
         _, jac2 = residual.evaluate(params, compute_jacobians=[
-                                False, False, False])
+            False, False, False])
         assert len(jac1) == len(jac2) == 3
         assert np.allclose(jac1, expected_jac)
         assert not any(jac2)
@@ -133,12 +134,12 @@ class TestReprojectionResidual:
         w = 200
         h = 200
         return ReprojectionResidual(StereoCamera(cu, cv, fu, fv, b, w, h),
-                                [40, 60, 10], np.eye(3))
+                                    [40, 60, 10], np.eye(3))
 
     def test_evaluate_stereo(self, stereo_residual):
         T_cam_w = SE3.exp([1, 2, 3, 4, 5, 6])
-        pt_good_w = T_cam_w.inv() \
-            * stereo_residual.camera.triangulate(stereo_residual.obs)
+        pt_good_w = T_cam_w.inv().dot(
+            stereo_residual.camera.triangulate(stereo_residual.obs))
         pt_bad_w = pt_good_w + [1, 1, 1]
         assert np.allclose(stereo_residual.evaluate(
             [T_cam_w, pt_good_w]), np.zeros(3))
@@ -147,7 +148,8 @@ class TestReprojectionResidual:
 
     def test_jacobians_stereo(self, stereo_residual):
         T_cam_w = SE3.exp([1, 2, 3, 4, 5, 6])
-        pt_w = T_cam_w.inv() * stereo_residual.camera.triangulate(stereo_residual.obs)
+        pt_w = T_cam_w.inv().dot(
+            stereo_residual.camera.triangulate(stereo_residual.obs))
         _, jac1 = stereo_residual.evaluate(
             [T_cam_w, pt_w], compute_jacobians=[True, True])
         _, jac2 = stereo_residual.evaluate(

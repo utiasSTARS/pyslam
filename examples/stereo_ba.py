@@ -32,7 +32,7 @@ camera = StereoCamera(640, 480, 1000, 1000, 0.25, 1280, 960)
 obs_var = [1, 1, 2]  # [u,v,d]
 obs_stiffness = invsqrt(np.diagflat(obs_var))
 
-obs = [[camera.project(T * p)
+obs = [[camera.project(T.dot(p))
         for p in pts_w_GT] for T in T_cam_w_GT]
 
 # Optimize
@@ -41,7 +41,6 @@ options.allow_nondecreasing_steps = True
 options.max_nondecreasing_steps = 3
 
 problem = Problem(options)
-
 for i, this_pose_obs in enumerate(obs):
     for j, o in enumerate(this_pose_obs):
         residual = ReprojectionResidual(camera, o, obs_stiffness)
@@ -65,8 +64,10 @@ for i, pose in enumerate(T_cam_w_GT):
 problem.initialize_params(params_init)
 problem.set_parameters_constant('T_cam0_w')
 
+# import ipdb
+# ipdb.set_trace()
 params_final = problem.solve()
-print()
+print(problem.summary(format='full'))
 
 # Compute errors
 print("Initial Error:")
@@ -75,7 +76,7 @@ for key in params_true.keys():
     p_true = params_true[key]
 
     if isinstance(p_est, SE3):
-        err = SE3.log(p_est.inv() * p_true)
+        err = SE3.log(p_est.inv().dot(p_true))
     else:
         err = p_est - p_true
 
@@ -89,7 +90,7 @@ for key in params_true.keys():
     p_true = params_true[key]
 
     if isinstance(p_est, SE3):
-        err = SE3.log(p_est.inv() * p_true)
+        err = SE3.log(p_est.inv().dot(p_true))
     else:
         err = p_est - p_true
 

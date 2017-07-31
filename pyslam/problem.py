@@ -33,7 +33,7 @@ class Options:
         self.max_nondecreasing_steps = 3
         """Maximum number of non-dereasing steps before terminating."""
 
-        self.num_threads = 4
+        self.num_threads = 1
         """Number of threads to use for residual and jacobian evaluation."""
 
 
@@ -290,7 +290,6 @@ class Problem:
         # Note that this is an exactly equivalent formulation, but avoids needing
         # to explicitly construct and multiply the (possibly very large) W
         # matrix.
-
         HT_blocks = [[None for _ in self.residual_blocks]
                      for _ in self.param_dict]
         e_blocks = [None for _ in self.residual_blocks]

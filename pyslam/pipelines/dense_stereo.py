@@ -123,18 +123,18 @@ class DenseStereoPipeline:
 
             if guess is None:
                 # Default initial guess is previous pose relative to keyframe
-                guess = self.T_c_w[-1] * self.keyframes[-1].T_c_w.inv()
+                guess = self.T_c_w[-1].dot(self.keyframes[-1].T_c_w.inv())
                 # Better initial guess is previous pose + previous motion
                 if len(self.T_c_w) > 1:
-                    guess = self.T_c_w[-1] * self.T_c_w[-2].inv() * guess
+                    guess = self.T_c_w[-1].dot(self.T_c_w[-2].inv().dot(guess))
             else:
-                guess = guess * self.keyframes[-1].T_c_w.inv()
+                guess = guess.dot(self.keyframes[-1].T_c_w.inv())
 
             # Estimate pose change from keyframe to tracking frame
             T_track_ref = self._compute_frame_to_frame_motion(
                 self.keyframes[-1], trackframe, guess)
             T_track_ref.normalize()  # Numerical instability problems otherwise
-            self.T_c_w.append(T_track_ref * self.keyframes[-1].T_c_w)
+            self.T_c_w.append(T_track_ref.dot(self.keyframes[-1].T_c_w))
 
             # Threshold the distance from the active keyframe to drop a new one
             se3_vec = SE3.log(T_track_ref)
