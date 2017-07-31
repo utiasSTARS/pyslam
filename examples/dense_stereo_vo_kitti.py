@@ -1,4 +1,6 @@
 import numpy as np
+import scipy.io
+
 import matplotlib.pyplot as plt
 from matplotlib import rc
 
@@ -11,7 +13,6 @@ from pyslam.metrics import TrajectoryMetrics
 
 import time
 import os
-import pickle
 
 
 def run_vo_kitti(basedir, outdir, date, drive, frames, outfile=None):
@@ -54,10 +55,9 @@ def run_vo_kitti(basedir, outdir, date, drive, frames, outfile=None):
     tm = TrajectoryMetrics(T_w_c_gt, T_w_c_est)
 
     # Save to file
-    if outfile:
+    if outfile is not None:
         print('Saving to {}'.format(outfile))
-        with open(outfile, 'wb') as f:
-            pickle.dump(tm, f, pickle.HIGHEST_PROTOCOL)
+        tm.savemat(outfile)
 
     return tm
 
@@ -80,7 +80,7 @@ def make_topdown_plot(tm, outfile=None):
     ax.set_ylabel('Northing (m)')
     ax.legend()
 
-    if outfile:
+    if outfile is not None:
         print('Saving to {}'.format(outfile))
         f.savefig(outfile)
 
@@ -107,7 +107,7 @@ def make_segment_err_plot(tm, segs, outfile=None):
     ax[1].set_xlabel('Sequence length (m)')
     ax[1].set_ylabel('Average error (deg/m)')
 
-    if outfile:
+    if outfile is not None:
         print('Saving to {}'.format(outfile))
         f.savefig(outfile)
 
@@ -173,16 +173,13 @@ def main():
         drive = val['drive']
         frames = val['frames']
 
-        frames = range(0, 300)
-        if key is not '00':
-            continue
+        # frames = range(0, 300)
+        # if key is not '00':
+        #     continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
-        outfile = os.path.join(outdir, date + '_drive_' + drive + '.pickle')
+        outfile = os.path.join(outdir, date + '_drive_' + drive + '.mat')
         tm = run_vo_kitti(basedir, outdir, date, drive, frames, outfile)
-
-        import ipdb
-        ipdb.set_trace()
 
         # Compute errors
         trans_armse, rot_armse = tm.armse()
