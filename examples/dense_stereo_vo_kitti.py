@@ -21,8 +21,8 @@ def run_vo_kitti(basedir, outdir, date, drive, frames, outfile=None):
     first_oxts = next(dataset.oxts)
     T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)
     T_cam0_imu.normalize()
-    T_0_w = T_cam0_imu * \
-        SE3.from_matrix(first_oxts.T_w_imu).inv()
+    T_0_w = T_cam0_imu.dot(
+        SE3.from_matrix(first_oxts.T_w_imu).inv())
     T_0_w.normalize()
 
     # Create the camera
@@ -36,7 +36,7 @@ def run_vo_kitti(basedir, outdir, date, drive, frames, outfile=None):
     camera = StereoCamera(cu, cv, fu, fv, b, w, h)
 
     # Ground truth
-    T_w_c_gt = [SE3.from_matrix(o.T_w_imu) * T_cam0_imu.inv()
+    T_w_c_gt = [SE3.from_matrix(o.T_w_imu).dot(T_cam0_imu.inv())
                 for o in dataset.oxts]
 
     # Pipeline
@@ -173,13 +173,16 @@ def main():
         drive = val['drive']
         frames = val['frames']
 
-        # frames = range(0, 100)
-        # if key is not '00':
-        #     continue
+        frames = range(0, 300)
+        if key is not '00':
+            continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
         outfile = os.path.join(outdir, date + '_drive_' + drive + '.pickle')
         tm = run_vo_kitti(basedir, outdir, date, drive, frames, outfile)
+
+        import ipdb
+        ipdb.set_trace()
 
         # Compute errors
         trans_armse, rot_armse = tm.armse()

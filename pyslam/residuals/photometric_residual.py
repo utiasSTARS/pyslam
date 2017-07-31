@@ -164,7 +164,7 @@ class PhotometricResidualSE3:
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
-        pt_track = T_track_ref * self.pt_ref
+        pt_track = T_track_ref.dot(self.pt_ref)
         uvd_track, project_jac = self.camera.project(
             pt_track, compute_jacobians=True)
 

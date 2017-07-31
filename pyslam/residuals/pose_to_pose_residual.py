@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class PoseToPoseResidual:
     """Binary pose-to-pose residual given relative pose mesurement in SE2/SE3."""
 
@@ -14,7 +15,7 @@ class PoseToPoseResidual:
 
         residual = np.dot(self.stiffness,
                           self.obstype.log(
-                              T_2_0_est * T_1_0_est.inv() * self.T_2_1_obs.inv()))
+                              T_2_0_est.dot(T_1_0_est.inv().dot(self.T_2_1_obs.inv()))))
 
         if compute_jacobians:
             jacobians = [None for _ in enumerate(params)]

@@ -13,7 +13,7 @@ class PoseResidual:
         T_est = params[0]
 
         residual = np.dot(self.stiffness,
-                          self.obstype.log(T_est * self.T_obs.inv()))
+                          self.obstype.log(T_est.dot(self.T_obs.inv())))
 
         if compute_jacobians:
             jacobians = [None for _ in enumerate(params)]

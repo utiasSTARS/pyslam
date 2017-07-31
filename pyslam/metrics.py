@@ -46,12 +46,12 @@ class TrajectoryMetrics:
         if segment_range is None:
             segment_range = range(len(self.Twv_gt))
 
-        pose_delta_gt = self.Twv_gt[segment_range[0]].inv() * \
-            self.Twv_gt[segment_range[-1]]
-        pose_delta_est = self.Twv_est[segment_range[0]].inv() * \
-            self.Twv_est[segment_range[-1]]
+        pose_delta_gt = self.Twv_gt[segment_range[0]].inv().dot(
+            self.Twv_gt[segment_range[-1]])
+        pose_delta_est = self.Twv_est[segment_range[0]].inv().dot(
+            self.Twv_est[segment_range[-1]])
 
-        pose_error = self.posetype.log(pose_delta_est.inv() * pose_delta_gt)
+        pose_error = self.posetype.log(pose_delta_est.inv().dot(pose_delta_gt))
         trans_err = np.linalg.norm(pose_error[0:3])
         rot_err = np.linalg.norm(pose_error[3:6])
 
@@ -100,12 +100,12 @@ class TrajectoryMetrics:
 
         errs = []
         for p_idx in segment_range:
-            pose_delta_gt = self.Twv_gt[segment_range[0]].inv() * \
-                self.Twv_gt[p_idx]
-            pose_delta_est = self.Twv_est[segment_range[0]].inv() * \
-                self.Twv_est[p_idx]
+            pose_delta_gt = self.Twv_gt[segment_range[0]].inv().dot(
+                self.Twv_gt[p_idx])
+            pose_delta_est = self.Twv_est[segment_range[0]].inv().dot(
+                self.Twv_est[p_idx])
             errs.append(self.posetype.log(
-                pose_delta_est.inv() * pose_delta_gt))
+                pose_delta_est.inv().dot(pose_delta_gt)))
 
         errs = np.array(errs)
         trans_err = errs[:, 0:3]
