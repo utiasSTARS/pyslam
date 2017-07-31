@@ -105,8 +105,8 @@ class ReprojectionMotionOnlyBatchResidual:
                 stiffness_repeats = np.asarray([self.stiffness]*self.num_pts) #Repeat the stiffness matrix (3,3) into a (N,3,3) matrix
 
                 #Optional: reweight stiffness according to KITTI heuristic                
-                reweights = 1/np.sqrt(np.abs(self.obs_2[:,0] -  self.camera.cu)/self.camera.cu + 0.05)
-                stiffness_repeats = np.multiply(stiffness_repeats, np.reshape(reweights, [self.num_pts,1,1]))
+                #reweights = 1/np.sqrt(np.abs(self.obs_2[:,0] -  self.camera.cu)/self.camera.cu + 0.05)
+                #stiffness_repeats = np.multiply(stiffness_repeats, np.reshape(reweights, [self.num_pts,1,1]))
 
                 jacob = stackmul(stiffness_repeats, inner_jacob)
 
