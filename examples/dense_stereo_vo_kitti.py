@@ -1,15 +1,13 @@
 import numpy as np
 import scipy.io
 
-import matplotlib.pyplot as plt
-from matplotlib import rc
-
 import pykitti
 
 from liegroups import SE3
 from pyslam.pipelines import DenseStereoPipeline
 from pyslam.sensors import StereoCamera
 from pyslam.metrics import TrajectoryMetrics
+from pyslam.visualizers import TrajectoryVisualizer
 
 import time
 import os
@@ -62,58 +60,6 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
     return tm
 
 
-def make_topdown_plot(tm, outfile=None):
-    pos_gt = np.array([T.trans for T in tm.Twv_gt])
-    pos_est = np.array([T.trans for T in tm.Twv_est])
-
-    f, ax = plt.subplots()
-
-    ax.plot(pos_gt[:, 0], pos_gt[:, 1], '-k',
-            linewidth=2, label='Ground Truth')
-    ax.plot(pos_est[:, 0], pos_est[:, 1], label='VO')
-
-    ax.axis('equal')
-    ax.minorticks_on()
-    ax.grid(which='both', linestyle=':', linewidth=0.2)
-    ax.set_title('Trajectory')
-    ax.set_xlabel('Easting (m)')
-    ax.set_ylabel('Northing (m)')
-    ax.legend()
-
-    if outfile is not None:
-        print('Saving to {}'.format(outfile))
-        f.savefig(outfile)
-
-    return f, ax
-
-
-def make_segment_err_plot(tm, segs, outfile=None):
-    segerr, avg_segerr = tm.segment_errors(segs)
-
-    f, ax = plt.subplots(1, 2, figsize=(12, 4))
-
-    ax[0].plot(avg_segerr[:, 0], avg_segerr[:, 1] * 100., '-s')
-    ax[1].plot(avg_segerr[:, 0], avg_segerr[:, 2] * 180. / np.pi, '-s')
-
-    ax[0].minorticks_on()
-    ax[0].grid(which='both', linestyle=':', linewidth=0.2)
-    ax[0].set_title('Translational error')
-    ax[0].set_xlabel('Sequence length (m)')
-    ax[0].set_ylabel('Average error (\%)')
-
-    ax[1].minorticks_on()
-    ax[1].grid(which='both', linestyle=':', linewidth=0.2)
-    ax[1].set_title('Rotational error')
-    ax[1].set_xlabel('Sequence length (m)')
-    ax[1].set_ylabel('Average error (deg/m)')
-
-    if outfile is not None:
-        print('Saving to {}'.format(outfile))
-        f.savefig(outfile)
-
-    return f, ax
-
-
 def main():
     # Odometry sequences
     # Nr.     Sequence name     Start   End
@@ -133,9 +79,6 @@ def main():
     basedir = '/Users/leeclement/Desktop/KITTI/raw/'
     outdir = '/Users/leeclement/Desktop/pyslam/KITTI/'
     os.makedirs(outdir, exist_ok=True)
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
 
     seqs = {'00': {'date': '2011_10_03',
                    'drive': '0027',
@@ -186,14 +129,15 @@ def main():
         print('trans armse: {} meters'.format(trans_armse))
         print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
 
-        # Make segment error plots
+        # Make plots
+        visualizer = TrajectoryVisualizer({'VO': tm})
+
         outfile = os.path.join(outdir, key + '_err.pdf')
         segs = list(range(100, 801, 100))
-        make_segment_err_plot(tm, segs, outfile)
+        visualizer.plot_segment_errors(segs, outfile=outfile)
 
-        # Make trajectory plots
         outfile = os.path.join(outdir, key + '_traj.pdf')
-        make_topdown_plot(tm, outfile)
+        visualizer.plot_topdown(outfile=outfile)
 
 
 # Do the thing
