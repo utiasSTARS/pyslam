@@ -162,18 +162,21 @@ class TrajectoryMetrics:
         if segment_range is None:
             segment_range = range(len(self.Twv_gt))
 
-        errs = []
+        trans_err = []
+        rot_err = []
+
         for p_idx in segment_range:
             pose_delta_gt = self.Twv_gt[segment_range[0]].inv().dot(
                 self.Twv_gt[p_idx])
-            pose_delta_est = self.Twv_est[segment_range[0]].inv().dot(
+            pose_delta_est = self.Twv_gt[segment_range[0]].inv().dot(
                 self.Twv_est[p_idx])
-            errs.append(self.pose_type.log(
-                pose_delta_est.inv().dot(pose_delta_gt)))
 
-        errs = np.array(errs)
-        trans_err = errs[:, 0:3]
-        rot_err = errs[:, 3:6]
+            pose_err = pose_delta_est.inv().dot(pose_delta_gt)
+            trans_err.append(pose_err.trans)
+            rot_err.append(pose_err.rot.log())
+
+        trans_err = np.array(trans_err)
+        rot_err = np.array(rot_err)
 
         return trans_err, rot_err
 
