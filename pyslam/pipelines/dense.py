@@ -62,6 +62,7 @@ class DenseVOPipeline:
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
             self.keyframes.append(trackframe)
+            trackframe.compute_pyramids()
         else:
             # Default behaviour for second frame and beyond
             if guess is None:
@@ -87,7 +88,7 @@ class DenseVOPipeline:
             if trans_dist > self.keyframe_trans_thresh or \
                     rot_dist > self.keyframe_rot_thresh:
                 trackframe.T_c_w = self.T_c_w[-1]
-                trackframe.compute_jacobian_and_disparity()
+                trackframe.compute_pyramids()
                 self.keyframes.append(trackframe)
 
                 print('Dropped new keyframe. '
@@ -158,7 +159,6 @@ class DenseStereoPipeline(DenseVOPipeline):
             # First frame, so create first keyframe with given initial pose
             trackframe = DenseStereoKeyframe(im_left, im_right, self.pyrlevels,
                                              self.T_c_w[0])
-            trackframe.compute_jacobian_and_disparity()
         else:
             # Default behaviour for second frame and beyond
             trackframe = DenseStereoKeyframe(im_left, im_right, self.pyrlevels)
@@ -177,7 +177,8 @@ class DenseRGBDPipeline(DenseVOPipeline):
             # First frame, so create first keyframe with given initial pose
             trackframe = DenseRGBDKeyframe(image, depth, self.pyrlevels,
                                            self.T_c_w[0])
-            trackframe.compute_jacobian()
         else:
             # Default behaviour for second frame and beyond
-            trackframe = DenseRGBDKeyframe(im_left, im_right, self.pyrlevels)
+            trackframe = DenseRGBDKeyframe(image, depth, self.pyrlevels)
+
+        super().track(trackframe, guess)

@@ -38,7 +38,7 @@ class DenseKeyframe(Keyframe):
 
         self.im_pyr = [im.astype(float) / 255. for im in im_pyr]
 
-    def compute_jacobian(self):
+    def compute_jacobian_pyramid(self):
         self.jacobian = []
         for im in self.im_pyr:
             gradx = 0.5 * cv2.Sobel(im, -1, 1, 0)
@@ -53,12 +53,31 @@ class DenseRGBDKeyframe(DenseKeyframe):
         super().__init__((image, depth), image, pyrlevels, T_c_w)
 
     @property
-    def image(self):
-        return self.data[0]
+    def disparity(self):
+        """Temporary kludge"""
+        return self.depth
 
-    @property
-    def depth(self):
-        return self.data[1]
+    def compute_depth_pyramid(self):
+        self.depth = []
+        stereo = cv2.StereoBM_create()
+        # stereo = cv2.StereoSGBM_create(minDisparity=0,
+        #                                numDisparities=64,
+        #                                blockSize=11)
+
+        # Compute disparity at full resolution and downsample
+        depth = self.data[1]
+
+        for pyrlevel in range(self.pyrlevels):
+            if pyrlevel == 0:
+                self.depth = [depth]
+            else:
+                pyr_factor = 2**-pyrlevel
+                depth = depth[0::2, 0::2]
+                self.depth.append(depth)
+
+    def compute_pyramids(self):
+        self.compute_jacobian_pyramid()
+        self.compute_depth_pyramid()
 
 
 class DenseStereoKeyframe(DenseKeyframe):
@@ -75,7 +94,7 @@ class DenseStereoKeyframe(DenseKeyframe):
     def im_right(self):
         return self.data[1]
 
-    def compute_disparity(self):
+    def compute_disparity_pyramid(self):
         self.disparity = []
         stereo = cv2.StereoBM_create()
         # stereo = cv2.StereoSGBM_create(minDisparity=0,
@@ -95,6 +114,6 @@ class DenseStereoKeyframe(DenseKeyframe):
                 disp = disp[0::2, 0::2]
                 self.disparity.append(disp * pyr_factor)
 
-    def compute_jacobian_and_disparity(self):
-        self.compute_jacobian()
-        self.compute_disparity()
+    def compute_pyramids(self):
+        self.compute_jacobian_pyramid()
+        self.compute_disparity_pyramid()
