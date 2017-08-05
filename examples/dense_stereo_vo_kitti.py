@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.io
 
 import pykitti
 
@@ -116,9 +115,9 @@ def main():
         drive = val['drive']
         frames = val['frames']
 
-        # frames = range(0, 300)
-        # if key is not '06':
-        #     continue
+        frames = range(0, 300)
+        if key is not '06':
+            continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
         outfile = os.path.join(outdir, key + '.mat')

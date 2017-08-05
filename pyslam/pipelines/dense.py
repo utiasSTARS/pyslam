@@ -5,65 +5,15 @@ import cv2
 
 from liegroups import SE3
 from pyslam.problem import Options, Problem
-from pyslam.sensors import StereoCamera
+from pyslam.sensors import StereoCamera, RGBDCamera
 from pyslam.residuals import PhotometricResidualSE3
 from pyslam.losses import TDistributionLoss, L2Loss, HuberLoss
 
-
-class DenseKeyframe:
-    """Dense keyframe"""
-
-    def __init__(self, im_left, im_right, pyrlevels=0, T_c_w=SE3.identity()):
-        self.im_left = im_left
-        self.im_right = im_right
-        self.pyrlevels = pyrlevels
-        self.T_c_w = T_c_w
-
-        # Compute image pyramid
-        for pyrlevel in range(self.pyrlevels):
-            if pyrlevel == 0:
-                pyr_left = [im_left]
-                # pyr_right = [im_right]
-            else:
-                pyr_left.append(cv2.pyrDown(pyr_left[-1]))
-                # pyr_right.append(cv2.pyrDown(pyr_right[-1]))
-
-        self.im_pyr = [im.astype(float) / 255. for im in pyr_left]
-
-    def compute_jacobian(self):
-        self.jacobian = []
-        for im in self.im_pyr:
-            gradx = 0.5 * cv2.Sobel(im, -1, 1, 0)
-            grady = 0.5 * cv2.Sobel(im, -1, 0, 1)
-            self.jacobian.append(np.array([gradx, grady]))
-
-    def compute_disparity(self):
-        self.disparity = []
-        stereo = cv2.StereoBM_create()
-        # stereo = cv2.StereoSGBM_create(minDisparity=0,
-        #                                numDisparities=64,
-        #                                blockSize=11)
-
-        # Compute disparity at full resolution and downsample
-        disp = stereo.compute(self.im_left, self.im_right).astype(float) / 16.
-
-        for pyrlevel in range(self.pyrlevels):
-            if pyrlevel == 0:
-                self.disparity = [disp]
-            else:
-                pyrfactor = 2**-pyrlevel
-                # disp = cv2.pyrDown(disp) # Applies a large Gaussian blur
-                # kernel!
-                disp = disp[0::2, 0::2]
-                self.disparity.append(disp * pyrfactor)
-
-    def compute_jacobian_and_disparity(self):
-        self.compute_jacobian()
-        self.compute_disparity()
+from pyslam.pipelines.keyframes import DenseStereoKeyframe, DenseRGBDKeyframe
 
 
-class DenseStereoPipeline:
-    """Dense stereo VO pipeline"""
+class DenseVOPipeline:
+    """Base class for dense VO pipelines"""
 
     def __init__(self, camera, first_pose=SE3.identity()):
         self.camera = camera
@@ -108,19 +58,12 @@ class DenseStereoPipeline:
         # self.loss = TDistributionLoss(3.0)
         """Loss function"""
 
-    def track(self, im_left, im_right, guess=None):
+    def track(self, trackframe, guess=None):
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
-            trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels,
-                                       self.T_c_w[0])
-            trackframe.compute_jacobian_and_disparity()
             self.keyframes.append(trackframe)
-
         else:
             # Default behaviour for second frame and beyond
-            trackframe = DenseKeyframe(im_left, im_right, self.pyrlevels)
-            # trackframe.compute_jacobian()
-
             if guess is None:
                 # Default initial guess is previous pose relative to keyframe
                 guess = self.T_c_w[-1].dot(self.keyframes[-1].T_c_w.inv())
@@ -202,3 +145,39 @@ class DenseStereoPipeline:
 
         # return params['T_1_0']
         return SE3(params['R_1_0'], params['t_1_0_1'])
+
+
+class DenseStereoPipeline(DenseVOPipeline):
+    """Dense stereo VO pipeine"""
+
+    def __init__(self, camera, first_pose=SE3.identity()):
+        super().__init__(camera, first_pose)
+
+    def track(self, im_left, im_right, guess=None):
+        if len(self.keyframes) == 0:
+            # First frame, so create first keyframe with given initial pose
+            trackframe = DenseStereoKeyframe(im_left, im_right, self.pyrlevels,
+                                             self.T_c_w[0])
+            trackframe.compute_jacobian_and_disparity()
+        else:
+            # Default behaviour for second frame and beyond
+            trackframe = DenseStereoKeyframe(im_left, im_right, self.pyrlevels)
+
+        super().track(trackframe, guess)
+
+
+class DenseRGBDPipeline(DenseVOPipeline):
+    """Dense RGB-D VO pipeline"""
+
+    def __init__(self, camera, first_pose=SE3.identity()):
+        super().__init__(camera, first_pose)
+
+    def track(self, image, depth, guess=None):
+        if len(self.keyframes) == 0:
+            # First frame, so create first keyframe with given initial pose
+            trackframe = DenseRGBDKeyframe(image, depth, self.pyrlevels,
+                                           self.T_c_w[0])
+            trackframe.compute_jacobian()
+        else:
+            # Default behaviour for second frame and beyond
+            trackframe = DenseRGBDKeyframe(im_left, im_right, self.pyrlevels)
