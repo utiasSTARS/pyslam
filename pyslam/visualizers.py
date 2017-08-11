@@ -81,13 +81,13 @@ class TrajectoryVisualizer:
         ax[0].minorticks_on()
         ax[0].grid(which='both', linestyle=':', linewidth=0.2)
         ax[0].set_title('Translational error')
-        ax[0].set_xlabel('Sequence length (m)')
+        ax[0].set_xlabel('Segment length (m)')
         ax[0].set_ylabel('Average error (\%)')
 
         ax[1].minorticks_on()
         ax[1].grid(which='both', linestyle=':', linewidth=0.2)
         ax[1].set_title('Rotational error')
-        ax[1].set_xlabel('Sequence length (m)')
+        ax[1].set_xlabel('Segment length (m)')
         ax[1].set_ylabel('Average error (deg/m)')
         ax[1].legend()
 
