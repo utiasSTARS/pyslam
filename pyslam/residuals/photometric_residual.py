@@ -113,8 +113,9 @@ class PhotometricResidualSE3:
     Uses the pre-computed reference image jacobian as an approximation to the
     tracking image jacobian under the assumption that the camera motion is small."""
 
-    def __init__(self, camera, im_ref, disp_ref, im_track, im_jac,
-                 intensity_stiffness, disparity_stiffness, min_grad=0.):
+    def __init__(self, camera, im_ref, depth_ref, im_track, im_jac,
+                 intensity_stiffness, depth_stiffness, min_grad=0.):
+        """Depth image and stiffness parameter can also be disparity."""
         self.camera = camera
         self.im_ref = im_ref.ravel()
 
@@ -123,20 +124,20 @@ class PhotometricResidualSE3:
         u_coords, v_coords = np.meshgrid(u_range, v_range, indexing='xy')
         self.uvd_ref = np.vstack([u_coords.ravel(),
                                   v_coords.ravel(),
-                                  disp_ref.ravel()]).T
+                                  depth_ref.ravel()]).T
         self.im_jac = np.vstack([im_jac[0].ravel(),
                                  im_jac[1].ravel()]).T
 
         self.im_track = im_track
 
         self.intensity_stiffness = intensity_stiffness
-        self.disparity_stiffness = disparity_stiffness
+        self.depth_stiffness = depth_stiffness
         self.intensity_covar = intensity_stiffness ** -2
-        self.disparity_covar = disparity_stiffness ** -2
+        self.depth_covar = depth_stiffness ** -2
 
         self.min_grad = min_grad
 
-        # Filter out invalid pixels (NaN or negative disparity)
+        # Filter out invalid pixels (NaN or negative depth)
         valid_pixels = self.camera.is_valid_measurement(self.uvd_ref)
         self.uvd_ref = self.uvd_ref.compress(valid_pixels, axis=0)
         self.im_ref = self.im_ref.compress(valid_pixels)
@@ -180,23 +181,23 @@ class PhotometricResidualSE3:
                                           uvd_track[:, 1])
         residual = (im_ref_est - self.im_ref).compress(valid_pixels)
 
-        # We need the jacobian of the residual w.r.t. the disparity
+        # We need the jacobian of the residual w.r.t. the depth
         # to compute a reasonable stiffness paramater
         # This is actually faster than filtering the intermediate results!
         im_proj_jac = stackmul(self.im_jac[:, np.newaxis, :],
                                project_jac[:, 0:2, :])  # Nx1x3
         temp = stackmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
-        im_disp_jac = np.squeeze(stackmul(temp, self.triang_jac[:, :, 2:3])).compress(
+        im_depth_jac = np.squeeze(stackmul(temp, self.triang_jac[:, :, 2:3])).compress(
             valid_pixels, axis=0)  # Nx1x1
 
         # Compute the overall stiffness
         # \sigma^2 = \sigma^2_I + J_d \sigma^2_d J_d^T
         stiffness = 1. / np.sqrt(self.intensity_covar +
-                                 self.disparity_covar * im_disp_jac * im_disp_jac)
+                                 self.depth_covar * im_depth_jac**2)
         # stiffness = self.intensity_stiffness
         residual = stiffness * residual
 
-        # DEBUG: Rebuild residual and disparity images
+        # DEBUG: Rebuild residual and depth images
         # self._rebuild_images(residual, im_ref_est, self.im_ref, valid_pixels)
         # import ipdb
         # ipdb.set_trace()
@@ -235,7 +236,7 @@ class PhotometricResidualSE3:
 
     def _rebuild_images(self, residual, im_ref_est, im_ref_true, valid_pixels):
         """Debug function to rebuild the filtered
-        residual and disparity images as a sanity check"""
+        residual and depth images as a sanity check"""
         uvd_ref = self.uvd_ref[valid_pixels]
         imshape = (self.camera.h, self.camera.w)
 
@@ -254,7 +255,7 @@ class PhotometricResidualSE3:
             uvd_ref.astype(int)[:, 1],
             uvd_ref.astype(int)[:, 0]] = residual
 
-        self.disparity_image = np.full(imshape, np.nan)
-        self.disparity_image[
+        self.depth_image = np.full(imshape, np.nan)
+        self.depth_image[
             uvd_ref.astype(int)[:, 1],
             uvd_ref.astype(int)[:, 0]] = uvd_ref[:, 2]

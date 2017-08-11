@@ -45,10 +45,12 @@ class DenseVOPipeline:
 
         self.intensity_stiffness = 1. / 0.01
         """Photometric measurement stiffness"""
-        self.disparity_stiffness = 1. / 0.5
-        """Disparity measurement stiffness"""
+        self.depth_stiffness = 1. / 0.01
+        """Depth or disparity measurement stiffness"""
         self.min_grad = 0.1
         """Minimum image gradient magnitude to use a given pixel"""
+        self.depth_map_type = 'depth'
+        """Is the depth map depth, inverse depth, disparity? ['depth','disparity'] supported"""
 
         # self.loss = L2Loss()
         self.loss = HuberLoss(10.0)
@@ -58,27 +60,30 @@ class DenseVOPipeline:
         # self.loss = TDistributionLoss(3.0)
         """Loss function"""
 
-    def track(self, trackframe, guess=None):
+    def track(self, trackframe, guess=None, mode='map'):
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
             self.keyframes.append(trackframe)
             trackframe.compute_pyramids()
+            self.active_keyframe = self.keyframes[0]
         else:
             # Default behaviour for second frame and beyond
+            self.active_keyframe = self.keyframes[-1]
+
             if guess is None:
                 # Default initial guess is previous pose relative to keyframe
-                guess = self.T_c_w[-1].dot(self.keyframes[-1].T_c_w.inv())
+                guess = self.T_c_w[-1].dot(self.active_keyframe.T_c_w.inv())
                 # Better initial guess is previous pose + previous motion
                 if len(self.T_c_w) > 1:
                     guess = self.T_c_w[-1].dot(self.T_c_w[-2].inv().dot(guess))
             else:
-                guess = guess.dot(self.keyframes[-1].T_c_w.inv())
+                guess = guess.dot(self.active_keyframe.T_c_w.inv())
 
             # Estimate pose change from keyframe to tracking frame
             T_track_ref = self._compute_frame_to_frame_motion(
-                self.keyframes[-1], trackframe, guess)
+                self.active_keyframe, trackframe, guess)
             T_track_ref.normalize()  # Numerical instability problems otherwise
-            self.T_c_w.append(T_track_ref.dot(self.keyframes[-1].T_c_w))
+            self.T_c_w.append(T_track_ref.dot(self.active_keyframe.T_c_w))
 
             # Threshold the distance from the active keyframe to drop a new one
             se3_vec = SE3.log(T_track_ref)
@@ -92,7 +97,8 @@ class DenseVOPipeline:
                 self.keyframes.append(trackframe)
 
                 print('Dropped new keyframe. '
-                      'Trans dist was {:.3f}. Rot dist was {:.3f}. Now have {}.'.format(trans_dist, rot_dist, len(self.keyframes)))
+                      'Trans dist was {:.3f}. Rot dist was {:.3f}. Now have {}.'.format(
+                          trans_dist, rot_dist, len(self.keyframes)))
 
     def _compute_frame_to_frame_motion(self, ref_frame, track_frame,
                                        guess=SE3.identity()):
@@ -114,13 +120,21 @@ class DenseVOPipeline:
             # im_jacobian = 0.5 * (ref_frame.jacobian[pyrlevel] +
             #                      track_frame.jacobian[pyrlevel])
 
+            if self.depth_map_type is 'disparity':
+                depth_ref = ref_frame.disparity[pyrlevel]
+                # Disparity is in pixels, so we need to scale it according to the pyramid level
+                depth_stiffness = self.depth_stiffness / pyrfactor
+            else:
+                depth_ref = ref_frame.depth[pyrlevel]
+                depth_stiffness = self.depth_stiffness
+
             residual = PhotometricResidualSE3(pyr_camera,
                                               ref_frame.im_pyr[pyrlevel],
-                                              ref_frame.disparity[pyrlevel],
+                                              depth_ref,
                                               track_frame.im_pyr[pyrlevel],
                                               im_jacobian,
                                               self.intensity_stiffness,
-                                              self.disparity_stiffness / pyrfactor,
+                                              depth_stiffness,
                                               self.min_grad)
 
             problem = Problem(self.motion_options)
@@ -153,6 +167,8 @@ class DenseStereoPipeline(DenseVOPipeline):
 
     def __init__(self, camera, first_pose=SE3.identity()):
         super().__init__(camera, first_pose)
+        self.depth_map_type = 'disparity'
+        self.depth_stiffness = 1 / 0.5
 
     def track(self, im_left, im_right, guess=None):
         if len(self.keyframes) == 0:
@@ -167,10 +183,12 @@ class DenseStereoPipeline(DenseVOPipeline):
 
 
 class DenseRGBDPipeline(DenseVOPipeline):
-    """Dense RGB-D VO pipeline"""
+    """Dense RGBD VO pipeline"""
 
     def __init__(self, camera, first_pose=SE3.identity()):
         super().__init__(camera, first_pose)
+        self.depth_map_type = 'depth'
+        self.depth_stiffness = 1 / 0.01
 
     def track(self, image, depth, guess=None):
         if len(self.keyframes) == 0:

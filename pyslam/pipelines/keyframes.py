@@ -52,11 +52,6 @@ class DenseRGBDKeyframe(DenseKeyframe):
     def __init__(self, image, depth, pyrlevels=0, T_c_w=SE3.identity()):
         super().__init__((image, depth), image, pyrlevels, T_c_w)
 
-    @property
-    def disparity(self):
-        """Temporary kludge"""
-        return self.depth
-
     def compute_depth_pyramid(self):
         self.depth = []
         stereo = cv2.StereoBM_create()
