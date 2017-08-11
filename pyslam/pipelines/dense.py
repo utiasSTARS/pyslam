@@ -18,6 +18,8 @@ class DenseVOPipeline:
     def __init__(self, camera, first_pose=SE3.identity()):
         self.camera = camera
         """Camera model"""
+        self.first_pose = first_pose
+        """First pose"""
         self.keyframes = []
         """List of keyframes"""
         self.T_c_w = [first_pose]
@@ -51,6 +53,8 @@ class DenseVOPipeline:
         """Minimum image gradient magnitude to use a given pixel"""
         self.depth_map_type = 'depth'
         """Is the depth map depth, inverse depth, disparity? ['depth','disparity'] supported"""
+        self.mode = 'map'
+        """Create new keyframes or localize against existing ones? ['map'|'track']"""
 
         # self.loss = L2Loss()
         self.loss = HuberLoss(10.0)
@@ -60,30 +64,44 @@ class DenseVOPipeline:
         # self.loss = TDistributionLoss(3.0)
         """Loss function"""
 
-    def track(self, trackframe, guess=None, mode='map'):
+    def set_mode(self, mode):
+        """Set the localization mode to ['map'|'track']"""
+        self.mode = mode
+        if self.mode == 'track':
+            self.active_keyframe_idx = 0
+            self.T_c_w = [self.first_pose]
+
+    def track(self, trackframe, guess=None):
+        """ Track an image.
+
+            Args:
+                trackframe  : frame to track
+                guess       : optional initial guess of the motion
+        """
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
-            self.keyframes.append(trackframe)
             trackframe.compute_pyramids()
-            self.active_keyframe = self.keyframes[0]
+            self.keyframes.append(trackframe)
+            self.active_keyframe_idx = 0
+            active_keyframe = self.keyframes[0]
         else:
             # Default behaviour for second frame and beyond
-            self.active_keyframe = self.keyframes[-1]
+            active_keyframe = self.keyframes[self.active_keyframe_idx]
 
             if guess is None:
                 # Default initial guess is previous pose relative to keyframe
-                guess = self.T_c_w[-1].dot(self.active_keyframe.T_c_w.inv())
+                guess = self.T_c_w[-1].dot(active_keyframe.T_c_w.inv())
                 # Better initial guess is previous pose + previous motion
                 if len(self.T_c_w) > 1:
                     guess = self.T_c_w[-1].dot(self.T_c_w[-2].inv().dot(guess))
             else:
-                guess = guess.dot(self.active_keyframe.T_c_w.inv())
+                guess = guess.dot(active_keyframe.T_c_w.inv())
 
             # Estimate pose change from keyframe to tracking frame
             T_track_ref = self._compute_frame_to_frame_motion(
-                self.active_keyframe, trackframe, guess)
+                active_keyframe, trackframe, guess)
             T_track_ref.normalize()  # Numerical instability problems otherwise
-            self.T_c_w.append(T_track_ref.dot(self.active_keyframe.T_c_w))
+            self.T_c_w.append(T_track_ref.dot(active_keyframe.T_c_w))
 
             # Threshold the distance from the active keyframe to drop a new one
             se3_vec = SE3.log(T_track_ref)
@@ -92,13 +110,18 @@ class DenseVOPipeline:
 
             if trans_dist > self.keyframe_trans_thresh or \
                     rot_dist > self.keyframe_rot_thresh:
-                trackframe.T_c_w = self.T_c_w[-1]
-                trackframe.compute_pyramids()
-                self.keyframes.append(trackframe)
+                if self.mode is 'map':
+                    trackframe.T_c_w = self.T_c_w[-1]
+                    trackframe.compute_pyramids()
+                    self.keyframes.append(trackframe)
 
-                print('Dropped new keyframe. '
-                      'Trans dist was {:.3f}. Rot dist was {:.3f}. Now have {}.'.format(
-                          trans_dist, rot_dist, len(self.keyframes)))
+                    print('Dropped new keyframe. '
+                          'Trans dist was {:.3f}. Rot dist was {:.3f}.'.format(
+                              trans_dist, rot_dist))
+
+                self.active_keyframe_idx += 1
+                print('Active keyframe idx: {}'.format(
+                    self.active_keyframe_idx))
 
     def _compute_frame_to_frame_motion(self, ref_frame, track_frame,
                                        guess=SE3.identity()):
