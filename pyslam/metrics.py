@@ -49,6 +49,26 @@ class TrajectoryMetrics:
         cum_dist_gt = np.cumsum(rel_dist_gt)
         return rel_dist_gt, cum_dist_gt
 
+    def _convert_meters(self, meters, unit):
+        """Convert meters to unit ['m', 'dm', 'cm', 'mm']"""
+        scale = {
+            'm': 1.,
+            'dm': 10.,
+            'cm': 100.,
+            'mm': 1000.
+        }[unit]
+
+        return scale * meters
+
+    def _convert_radians(self, radians, unit):
+        """Convert radians to unit ['rad', 'deg']"""
+        scale = {
+            'rad': 1,
+            'deg': 180. / np.pi
+        }[unit]
+
+        return scale * radians
+
     def savemat(self, filename):
         """Save trajectory data to a .mat file.
 
@@ -104,7 +124,7 @@ class TrajectoryMetrics:
 
         return cls(poses_gt, poses_est, convention=mdict['convention'])
 
-    def endpoint_error(self, segment_range=None):
+    def endpoint_error(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Returns translational and rotational error at the endpoint of a segment"""
         if segment_range is None:
             segment_range = range(len(self.Twv_gt))
@@ -119,9 +139,9 @@ class TrajectoryMetrics:
         trans_err = np.linalg.norm(pose_error[0:3])
         rot_err = np.linalg.norm(pose_error[3:6])
 
-        return trans_err, rot_err
+        return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
 
-    def segment_errors(self, segment_lengths):
+    def segment_errors(self, segment_lengths, trans_unit='m', rot_unit='rad'):
         """Compute endpoint errors and average endpoint errors
             all possible segments of specified lengths in meters.
 
@@ -131,6 +151,8 @@ class TrajectoryMetrics:
         # Compute all endpoint errors for each segment length
         errs = []
         for length in segment_lengths:
+            length = self._convert_meters(length, trans_unit)
+
             for start in range(self.num_poses):
                 # Find the index of the pose s.t. distance relative to segment
                 # start is >= length
@@ -141,7 +163,8 @@ class TrajectoryMetrics:
                 # stop == self.num_poses means no solution
                 if stop < self.num_poses:
                     trans_err, rot_err = self.endpoint_error(
-                        range(start, stop + 1))
+                        range(start, stop + 1), trans_unit, rot_unit)
+
                     errs.append([length, trans_err / length, rot_err / length])
 
         errs = np.array(errs)
@@ -149,13 +172,14 @@ class TrajectoryMetrics:
         # Compute average endpoint error for each segment length
         avg_errs = []
         for length in segment_lengths:
+            length = self._convert_meters(length, trans_unit)
             avg_errs.append(np.mean(errs[errs[:, 0] == length], axis=0))
 
         avg_errs = np.array(avg_errs)
 
         return errs, avg_errs
 
-    def pose_errors(self, segment_range=None):
+    def pose_errors(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Returns translational (m) and rotational (rad) errors
             in all degrees of freedom
         """
@@ -178,23 +202,24 @@ class TrajectoryMetrics:
         trans_err = np.array(trans_err)
         rot_err = np.array(rot_err)
 
-        return trans_err, rot_err
+        return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
 
-    def rmse(self, segment_range=None):
+    def rmse(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Root mean squared error (RMSE) of the trajectory."""
-        trans_errs, rot_errs = self.pose_errors(segment_range)
+        trans_errs, rot_errs = self.pose_errors(
+            segment_range, trans_unit, rot_unit)
 
         trans_rmse = np.sqrt(np.mean(trans_errs**2, axis=1))
         rot_rmse = np.sqrt(np.mean(rot_errs**2, axis=1))
 
         return trans_rmse, rot_rmse
 
-    def armse(self, segment_range=None):
+    def armse(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Average root mean squared error (ARMSE) of the trajectory."""
-        trans_rmse, rot_rmse = self.rmse(segment_range)
+        trans_rmse, rot_rmse = self.rmse(segment_range, trans_unit, rot_unit)
         return np.mean(trans_rmse), np.mean(rot_rmse)
 
-    def crmse(self, segment_range=None):
+    def crmse(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Cumulative root mean squared error (CRMSE) of the trajectory."""
-        trans_rmse, rot_rmse = self.rmse(segment_range)
+        trans_rmse, rot_rmse = self.rmse(segment_range, trans_unit, rot_unit)
         return np.cumsum(trans_rmse), np.cumsum(rot_rmse)
