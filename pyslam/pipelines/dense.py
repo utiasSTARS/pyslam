@@ -37,7 +37,7 @@ class DenseVOPipeline:
 
         self.pyrlevels = 4
         """Number of image pyramid levels for coarse-to-fine optimization"""
-        self.pyrlevel_sequence = list(range(self.pyrlevels))[1:]
+        self.pyrlevel_sequence = list(range(self.pyrlevels))
         self.pyrlevel_sequence.reverse()
 
         self.keyframe_trans_thresh = 3.0  # meters
