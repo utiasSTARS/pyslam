@@ -179,7 +179,7 @@ class TrajectoryMetrics:
 
         return errs, avg_errs
 
-    def pose_errors(self, segment_range=None, trans_unit='m', rot_unit='rad'):
+    def traj_errors(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Returns translational (m) and rotational (rad) errors
             in all degrees of freedom
         """
@@ -203,23 +203,71 @@ class TrajectoryMetrics:
         rot_err = np.array(rot_err)
 
         return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
+    
+    def rel_errors(self, segment_range=None, trans_unit='m', rot_unit='rad'):
+        """Returns translational (m) and rotational (rad) relative pose errors (RPEs)
+            in all degrees of freedom - See equation (1) in "A Benchmark for the Evaluation of RGB-D SLAM Systems" by Sturm et al.
+        """
+        if segment_range is None:
+            segment_range = range(len(self.Twv_gt))
 
-    def rmse(self, segment_range=None, trans_unit='m', rot_unit='rad'):
-        """Root mean squared error (RMSE) of the trajectory."""
-        trans_errs, rot_errs = self.pose_errors(
-            segment_range, trans_unit, rot_unit)
+        trans_err = []
+        rot_err = []
 
-        trans_rmse = np.sqrt(np.mean(trans_errs**2, axis=1))
-        rot_rmse = np.sqrt(np.mean(rot_errs**2, axis=1))
+        for p_idx in segment_range[:-1]:
+            rel_pose_delta_gt = self.Twv_gt[p_idx].inv().dot(
+                self.Twv_gt[p_idx+1])
+            rel_pose_delta_est = self.Twv_est[p_idx].inv().dot(
+                self.Twv_est[p_idx+1])
 
-        return trans_rmse, rot_rmse
+            pose_err = rel_pose_delta_gt.inv().dot(rel_pose_delta_est)
+            trans_err.append(pose_err.trans)
+            rot_err.append(pose_err.rot.log())
 
-    def armse(self, segment_range=None, trans_unit='m', rot_unit='rad'):
-        """Average root mean squared error (ARMSE) of the trajectory."""
-        trans_rmse, rot_rmse = self.rmse(segment_range, trans_unit, rot_unit)
-        return np.mean(trans_rmse), np.mean(rot_rmse)
+        trans_err = np.array(trans_err)
+        rot_err = np.array(rot_err)
 
-    def crmse(self, segment_range=None, trans_unit='m', rot_unit='rad'):
-        """Cumulative root mean squared error (CRMSE) of the trajectory."""
-        trans_rmse, rot_rmse = self.rmse(segment_range, trans_unit, rot_unit)
-        return np.cumsum(trans_rmse), np.cumsum(rot_rmse)
+        return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
+
+
+
+    def error_norms(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
+        """Error norms (magnitude of errors in rotation and translation) of the trajectory."""
+
+        if error_type == 'traj':
+            trans_errs, rot_errs = self.traj_errors(
+                segment_range, trans_unit, rot_unit)
+        elif error_type == 'rel':
+            trans_errs, rot_errs = self.rel_errors(
+                segment_range, trans_unit, rot_unit)
+        else:
+            raise ValueError('error_type must be either `traj` or `rel`.')
+
+        trans_norms = np.sqrt(np.sum(trans_errs**2, axis=1))
+        rot_norms = np.sqrt(np.sum(rot_errs**2, axis=1))
+
+        return trans_norms, rot_norms
+    
+    def mean_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
+        """Mean of the rotation and translation error magnitudes over the entire trajectory. 
+            error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
+            error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
+        """
+        trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
+        return np.mean(trans_norms), np.mean(rot_norms)
+    
+    def cum_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
+        """Cumulative sum of the rotation and translation error magnitudes over the entire trajectory. 
+            error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
+            error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
+        """
+        trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
+        return np.cumsum(trans_norms), np.cumsum(rot_norms)
+
+    def rms_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
+        """RMS of the rotation and translation error magnitudes over the entire trajectory. 
+            error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
+            error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
+        """
+        trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
+        return np.sqrt(np.mean(trans_norms**2)), np.sqrt(np.mean(rot_norms**2))
