@@ -1,12 +1,12 @@
 import numpy as np
 
 import matplotlib
+matplotlib.use('Agg') #Removes the XWindows backend (useful for producing plots via tmux without -X)
 import matplotlib.pyplot as plt
 from matplotlib import rc
 
 from pyslam.metrics import TrajectoryMetrics
 
-matplotlib.use('Agg') #Removes the XWindows backend (useful for producing plots via tmux without -X)
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 
