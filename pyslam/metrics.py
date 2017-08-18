@@ -250,14 +250,19 @@ class TrajectoryMetrics:
     
     def mean_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
         """Mean of the rotation and translation error magnitudes over the entire trajectory. 
+
+            Notes:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
             error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
+
         """
         trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
         return np.mean(trans_norms), np.mean(rot_norms)
     
     def cum_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
         """Cumulative sum of the rotation and translation error magnitudes over the entire trajectory. 
+            
+            Notes:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
             error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
         """
@@ -266,6 +271,8 @@ class TrajectoryMetrics:
 
     def rms_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
         """RMS of the rotation and translation error magnitudes over the entire trajectory. 
+            
+            Notes:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
             error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
         """

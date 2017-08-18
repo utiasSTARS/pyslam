@@ -1,10 +1,12 @@
 import numpy as np
 
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import rc
 
 from pyslam.metrics import TrajectoryMetrics
 
+matplotlib.use('Agg') #Removes the XWindows backend (useful for producing plots via tmux without -X)
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 
@@ -114,12 +116,12 @@ class TrajectoryVisualizer:
             if segment_range is None:
                 segment_range = range(len(tm.Twv_gt))
 
-            if err_type == 'rmse':
-                trans_err, rot_err = tm.rmse(segment_range)
-                err_name = 'RMSE'
-            elif err_type == 'crmse':
-                trans_err, rot_err = tm.crmse(segment_range)
-                err_name = 'CRMSE'
+            if err_type == 'mean':
+                trans_err, rot_err = tm.mean_err(segment_range)
+                err_name = 'Mean Err. Norm.'
+            elif err_type == 'cum':
+                trans_err, rot_err = tm.cum_err(segment_range)
+                err_name = 'Cumulative Err. Norm.'
             else:
                 raise ValueError(
                     'Got invalid err_type \'{}\''.format(err_type))
@@ -158,22 +160,22 @@ class TrajectoryVisualizer:
         """
         return self._trans_rot_err_subplot('all', segment_range, outfile, **kwargs)
 
-    def plot_rmse(self, segment_range=None, outfile=None, **kwargs):
-        """ Plot translational and rotational RMSE over the trajectory.
+    def plot_mean_err(self, segment_range=None, outfile=None, **kwargs):
+        """ Plot translational and rotational error norms over the trajectory.
 
             Args:
                 segment_range   : which segment of the trajectory to plot
                 outfile         : full path and filename where the plot should be saved
                 **kwargs        : additional keyword arguments passed to plt.subplots()
         """
-        return self._trans_rot_err_subplot('rmse', segment_range, outfile, **kwargs)
+        return self._trans_rot_err_subplot('mean', segment_range, outfile, **kwargs)
 
-    def plot_crmse(self, segment_range=None, outfile=None, **kwargs):
-        """ Plot translational and rotational RMSE over the trajectory.
+    def plot_cum_err(self, segment_range=None, outfile=None, **kwargs):
+        """ Plot cmulative translational and rotational error norms over the trajectory.
 
             Args:
                 segment_range   : which segment of the trajectory to plot
                 outfile         : full path and filename where the plot should be saved
                 **kwargs        : additional keyword arguments passed to plt.subplots()
         """
-        return self._trans_rot_err_subplot('crmse', segment_range, outfile, **kwargs)
+        return self._trans_rot_err_subplot('cum', segment_range, outfile, **kwargs)
