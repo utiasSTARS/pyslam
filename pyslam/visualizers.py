@@ -119,7 +119,7 @@ class TrajectoryVisualizer:
             if err_type == 'norm':
                 trans_err, rot_err = tm.error_norms(segment_range)
                 err_name = 'Err. Norm.'
-            elif err_type == 'cum_norm':
+            elif err_type == 'cum':
                 trans_err, rot_err = tm.cum_err(segment_range)
                 err_name = 'Cumulative Err. Norm.'
             else:
