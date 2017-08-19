@@ -116,10 +116,10 @@ class TrajectoryVisualizer:
             if segment_range is None:
                 segment_range = range(len(tm.Twv_gt))
 
-            if err_type == 'mean':
-                trans_err, rot_err = tm.mean_err(segment_range)
-                err_name = 'Mean Err. Norm.'
-            elif err_type == 'cum':
+            if err_type == 'norm':
+                trans_err, rot_err = tm.error_norms(segment_range)
+                err_name = 'Err. Norm.'
+            elif err_type == 'cum_norm':
                 trans_err, rot_err = tm.cum_err(segment_range)
                 err_name = 'Cumulative Err. Norm.'
             else:
@@ -160,7 +160,7 @@ class TrajectoryVisualizer:
         """
         return self._trans_rot_err_subplot('all', segment_range, outfile, **kwargs)
 
-    def plot_mean_err(self, segment_range=None, outfile=None, **kwargs):
+    def plot_norm_err(self, segment_range=None, outfile=None, **kwargs):
         """ Plot translational and rotational error norms over the trajectory.
 
             Args:
@@ -168,9 +168,9 @@ class TrajectoryVisualizer:
                 outfile         : full path and filename where the plot should be saved
                 **kwargs        : additional keyword arguments passed to plt.subplots()
         """
-        return self._trans_rot_err_subplot('mean', segment_range, outfile, **kwargs)
+        return self._trans_rot_err_subplot('norm', segment_range, outfile, **kwargs)
 
-    def plot_cum_err(self, segment_range=None, outfile=None, **kwargs):
+    def plot_cum_norm_err(self, segment_range=None, outfile=None, **kwargs):
         """ Plot cmulative translational and rotational error norms over the trajectory.
 
             Args:
