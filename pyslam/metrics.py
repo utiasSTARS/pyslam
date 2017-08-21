@@ -69,10 +69,13 @@ class TrajectoryMetrics:
 
         return scale * radians
 
-    def savemat(self, filename):
+    def savemat(self, filename, extras=None):
         """Save trajectory data to a .mat file.
-
            Saved poses will use the same convention as the input poses.
+
+            Args:
+                filename : path of file to save
+                extras   : optional dictionary of extra arrays to save
         """
         # Convert poses to matrices using original convention
         if self.convention == 'Twv':
@@ -94,11 +97,18 @@ class TrajectoryMetrics:
                  'num_poses': self.num_poses,
                  'rel_dists': self.rel_dists,
                  'cum_dists': self.cum_dists}
+        if extras is not None:
+            mdict.update(extras)
+
         scipy.io.savemat(filename, mdict, do_compression=True)
 
     @classmethod
     def loadmat(cls, filename):
-        """Load trajectory data from a .mat file."""
+        """Load trajectory data from a .mat file.
+
+            Args:
+                filename : path of file to load
+        """
         # Load from file
         mdict = scipy.io.loadmat(
             filename, verify_compressed_data_integrity=True)
@@ -122,7 +132,10 @@ class TrajectoryMetrics:
         poses_est = [pose_type.from_matrix(poses_est[:, :, i])
                      for i in range(num_poses)]
 
-        return cls(poses_gt, poses_est, convention=mdict['convention'])
+        tm = cls(poses_gt, poses_est, convention=mdict['convention'])
+        tm.mdict = mdict
+
+        return tm
 
     def endpoint_error(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Returns translational and rotational error at the endpoint of a segment"""
@@ -203,7 +216,7 @@ class TrajectoryMetrics:
         rot_err = np.array(rot_err)
 
         return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
-    
+
     def rel_errors(self, segment_range=None, trans_unit='m', rot_unit='rad'):
         """Returns translational (m) and rotational (rad) relative pose errors (RPEs)
             in all degrees of freedom - See equation (1) in "A Benchmark for the Evaluation of RGB-D SLAM Systems" by Sturm et al.
@@ -216,9 +229,9 @@ class TrajectoryMetrics:
 
         for p_idx in segment_range[:-1]:
             rel_pose_delta_gt = self.Twv_gt[p_idx].inv().dot(
-                self.Twv_gt[p_idx+1])
+                self.Twv_gt[p_idx + 1])
             rel_pose_delta_est = self.Twv_est[p_idx].inv().dot(
-                self.Twv_est[p_idx+1])
+                self.Twv_est[p_idx + 1])
 
             pose_err = rel_pose_delta_gt.inv().dot(rel_pose_delta_est)
             trans_err.append(pose_err.trans)
@@ -228,8 +241,6 @@ class TrajectoryMetrics:
         rot_err = np.array(rot_err)
 
         return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
-
-
 
     def error_norms(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
         """Error norms (magnitude of errors in rotation and translation) of the trajectory."""
@@ -247,21 +258,23 @@ class TrajectoryMetrics:
         rot_norms = np.sqrt(np.sum(rot_errs**2, axis=1))
 
         return trans_norms, rot_norms
-    
+
     def mean_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
         """Mean of the rotation and translation error magnitudes over the entire trajectory. 
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
             error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
         """
-        trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
+        trans_norms, rot_norms = self.error_norms(
+            segment_range, trans_unit, rot_unit, error_type)
         return np.mean(trans_norms), np.mean(rot_norms)
-    
+
     def cum_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
         """Cumulative sum of the rotation and translation error magnitudes over the entire trajectory. 
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
             error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
         """
-        trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
+        trans_norms, rot_norms = self.error_norms(
+            segment_range, trans_unit, rot_unit, error_type)
         return np.cumsum(trans_norms), np.cumsum(rot_norms)
 
     def rms_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
@@ -269,5 +282,6 @@ class TrajectoryMetrics:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
             error_type='rel' computes errors relative to ground truth over N-1 consecutive frame-to-frame transforms
         """
-        trans_norms, rot_norms = self.error_norms(segment_range, trans_unit, rot_unit, error_type)
+        trans_norms, rot_norms = self.error_norms(
+            segment_range, trans_unit, rot_unit, error_type)
         return np.sqrt(np.mean(trans_norms**2)), np.sqrt(np.mean(rot_norms**2))
