@@ -69,7 +69,7 @@ class DenseVOPipeline:
         self.mode = mode
         if self.mode == 'track':
             self.active_keyframe_idx = 0
-            self.T_c_w = [self.first_pose]
+            self.T_c_w = []
 
     def track(self, trackframe, guess=None):
         """ Track an image.
@@ -90,7 +90,11 @@ class DenseVOPipeline:
 
             if guess is None:
                 # Default initial guess is previous pose relative to keyframe
-                guess = self.T_c_w[-1].dot(active_keyframe.T_c_w.inv())
+                if len(self.T_c_w) == 0:
+                    # We just started relocalizing
+                    guess = active_keyframe.T_c_w
+                else:
+                    guess = self.T_c_w[-1].dot(active_keyframe.T_c_w.inv())
                 # Better initial guess is previous pose + previous motion
                 if len(self.T_c_w) > 1:
                     guess = self.T_c_w[-1].dot(self.T_c_w[-2].inv().dot(guess))

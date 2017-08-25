@@ -22,9 +22,16 @@ class TrajectoryMetrics:
         else:
             raise ValueError('convention must be \'Tvw\' or \'Twv\'')
 
+        if len(Twv_gt) != len(Twv_est):
+            valid_length = min((len(Twv_gt), len(Twv_est)))
+
+            print('WARNING: poses_gt has length {} but poses_est has length {}. Truncating to {}.'.format(
+                len(Twv_gt), len(Twv_est), valid_length))
+            Twv_gt = Twv_gt[:valid_length]
+            Twv_est = Twv_est[:valid_length]
+
         self.convention = convention
         """Were the input poses Twv or Tvw?"""
-
         self.Twv_gt = Twv_gt
         """List of ground truth vehicle-to-world poses."""
         self.Twv_est = Twv_est
@@ -260,7 +267,7 @@ class TrajectoryMetrics:
         return trans_norms, rot_norms
 
     def mean_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
-        """Mean of the rotation and translation error magnitudes over the entire trajectory. 
+        """Mean of the rotation and translation error magnitudes over the entire trajectory.
 
             Notes:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
@@ -272,7 +279,7 @@ class TrajectoryMetrics:
         return np.mean(trans_norms), np.mean(rot_norms)
 
     def cum_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj'):
-        """Cumulative sum of the rotation and translation error magnitudes over the entire trajectory. 
+        """Cumulative sum of the rotation and translation error magnitudes over the entire trajectory.
 
             Notes:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
@@ -283,7 +290,7 @@ class TrajectoryMetrics:
         return np.cumsum(trans_norms), np.cumsum(rot_norms)
 
     def rms_err(self, segment_range=None, trans_unit='m', rot_unit='rad', error_type='traj', delta=1):
-        """RMS of the rotation and translation error magnitudes over the entire trajectory. 
+        """RMS of the rotation and translation error magnitudes over the entire trajectory.
 
             Notes:
             error_type='traj' computes errors relative to ground truth for N T_wv poses (with respect to T_wv[0])
