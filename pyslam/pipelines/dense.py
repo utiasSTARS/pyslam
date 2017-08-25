@@ -92,7 +92,7 @@ class DenseVOPipeline:
                 # Default initial guess is previous pose relative to keyframe
                 if len(self.T_c_w) == 0:
                     # We just started relocalizing
-                    guess = active_keyframe.T_c_w
+                    guess = SE3.identity()
                 else:
                     guess = self.T_c_w[-1].dot(active_keyframe.T_c_w.inv())
                 # Better initial guess is previous pose + previous motion
