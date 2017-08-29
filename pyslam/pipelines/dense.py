@@ -56,6 +56,9 @@ class DenseVOPipeline:
         self.mode = 'map'
         """Create new keyframes or localize against existing ones? ['map'|'track']"""
 
+        self.use_motion_model_guess = True
+        """Use constant motion model for initial guess."""
+
         # self.loss = L2Loss()
         self.loss = HuberLoss(10.0)
         # self.loss = TukeyLoss(5.0)
@@ -96,7 +99,7 @@ class DenseVOPipeline:
                 else:
                     guess = self.T_c_w[-1].dot(active_keyframe.T_c_w.inv())
                 # Better initial guess is previous pose + previous motion
-                if len(self.T_c_w) > 1:
+                if self.use_motion_model_guess and len(self.T_c_w) > 1:
                     guess = self.T_c_w[-1].dot(self.T_c_w[-2].inv().dot(guess))
             else:
                 guess = guess.dot(active_keyframe.T_c_w.inv())
