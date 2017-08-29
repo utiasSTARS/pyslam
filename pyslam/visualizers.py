@@ -1,7 +1,8 @@
 import numpy as np
 
 import matplotlib
-matplotlib.use('Agg') #Removes the XWindows backend (useful for producing plots via tmux without -X)
+# Removes the XWindows backend (useful for producing plots via tmux without -X)
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import rc
 
@@ -18,14 +19,24 @@ class TrajectoryVisualizer:
         self.tm_dict = tm_dict
         """Dictionary of TrajectoryMetrics objects to plot."""
 
-    def plot_topdown(self, segment_range=None, outfile=None, **kwargs):
+    def plot_topdown(self, which_plane='xz', segment_range=None, outfile=None, **kwargs):
         """ Plot a top - down view of the trajectory.
 
             Args:
+                which_plane     : which plane to plot ['xy' | 'xz' | 'yz']
                 segment_range   : which segment of the trajectory to plot
                 outfile         : full path and filename where the plot should be saved
                 **kwargs        : additional keyword arguments passed to plt.subplots()
         """
+        if which_plane == 'xy':
+            x_dim, y_dim = 0, 1
+        elif which_plane == 'xz':
+            x_dim, y_dim = 0, 2
+        elif which_plane == 'yz':
+            x_dim, y_dim = 1, 2
+        else:
+            raise ValueError("which_plane must be ['xy' | 'xz' | 'yz']")
+
         fig, ax = plt.subplots(**kwargs)
 
         plotted_gt = False
@@ -39,11 +50,11 @@ class TrajectoryVisualizer:
                 pos_est = pos_est[segment_range, :]
 
             if not plotted_gt:
-                ax.plot(pos_gt[:, 0], pos_gt[:, 1], '-k',
+                ax.plot(pos_gt[:, x_dim], pos_gt[:, y_dim], '-k',
                         linewidth=2, label='Ground Truth')
                 plotted_gt = True
 
-            ax.plot(pos_est[:, 0], pos_est[:, 1], label=label)
+            ax.plot(pos_est[:, x_dim], pos_est[:, y_dim], label=label)
 
         ax.axis('equal')
         ax.minorticks_on()

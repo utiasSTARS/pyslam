@@ -134,9 +134,9 @@ class TrajectoryMetrics:
         poses_est = mdict['poses_est']
 
         # Convert to liegroups objects and create TrajectoryMetrics object
-        poses_gt = [pose_type.from_matrix(poses_gt[:, :, i])
+        poses_gt = [pose_type.from_matrix(poses_gt[:, :, i], normalize=True)
                     for i in range(num_poses)]
-        poses_est = [pose_type.from_matrix(poses_est[:, :, i])
+        poses_est = [pose_type.from_matrix(poses_est[:, :, i], normalize=True)
                      for i in range(num_poses)]
 
         tm = cls(poses_gt, poses_est, convention=mdict['convention'])
