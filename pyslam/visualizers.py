@@ -2,7 +2,7 @@ import numpy as np
 
 import matplotlib
 # Removes the XWindows backend (useful for producing plots via tmux without -X)
-matplotlib.use('Agg')
+matplotlib.use('Agg', warn=False)
 import matplotlib.pyplot as plt
 from matplotlib import rc
 
@@ -18,6 +18,38 @@ class TrajectoryVisualizer:
     def __init__(self, tm_dict):
         self.tm_dict = tm_dict
         """Dictionary of TrajectoryMetrics objects to plot."""
+
+        self.endpoint_markers_list = ['o', 'v', '^', '<', '>',
+                                      '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X']
+
+    def _parse_kwargs(self, kwargs):
+        out = {}
+        out['gt_linewidth'] = kwargs.get('gt_linewidth', 2.)
+        out['est_linewidth'] = kwargs.get('est_linewidth', 1.)
+        out['grid_linewidth'] = kwargs.get('grid_linewidth', 0.2)
+        out['use_endpoint_markers'] = kwargs.get('use_endpoint_markers', False)
+
+        try:
+            del kwargs['gt_linewidth']
+        except KeyError:
+            pass
+
+        try:
+            del kwargs['est_linewidth']
+        except KeyError:
+            pass
+
+        try:
+            del kwargs['grid_linewidth']
+        except KeyError:
+            pass
+
+        try:
+            del kwargs['use_endpoint_markers']
+        except KeyError:
+            pass
+
+        return out
 
     def plot_topdown(self, which_plane='xz', segment_range=None, outfile=None, **kwargs):
         """ Plot a top - down view of the trajectory.
@@ -35,9 +67,20 @@ class TrajectoryVisualizer:
         elif which_plane == 'yz':
             x_dim, y_dim = 1, 2
         else:
-            raise ValueError("which_plane must be ['xy' | 'xz' | 'yz']")
+            raise ValueError(
+                "which_plane must be ['xy' | 'xz' | 'yz']. Got {}".format(which_plane))
+
+        # Grab plot parameters, pass the rest to subplots
+        plot_params = self._parse_kwargs(kwargs)
+
+        # Use a sane default figsize if the user doesn't specify one
+        figsize = kwargs.get('figsize', (4, 3))
+        kwargs.update({'figsize': figsize})
 
         fig, ax = plt.subplots(**kwargs)
+
+        if plot_params['use_endpoint_markers']:
+            endpoint_markers_iter = iter(self.endpoint_markers_list)
 
         plotted_gt = False
 
@@ -50,15 +93,30 @@ class TrajectoryVisualizer:
                 pos_est = pos_est[segment_range, :]
 
             if not plotted_gt:
-                ax.plot(pos_gt[:, x_dim], pos_gt[:, y_dim], '-k',
-                        linewidth=2, label='Ground Truth')
+                if plot_params['use_endpoint_markers']:
+                    ax.plot(pos_gt[:, x_dim], pos_gt[:, y_dim], '-k',
+                            linewidth=plot_params['gt_linewidth'],
+                            marker=next(endpoint_markers_iter), markevery=[pos_gt.shape[0] - 1],
+                            label='Ground Truth')
+                else:
+                    ax.plot(pos_gt[:, x_dim], pos_gt[:, y_dim], '-k',
+                            linewidth=plot_params['gt_linewidth'], label='Ground Truth')
+
                 plotted_gt = True
 
-            ax.plot(pos_est[:, x_dim], pos_est[:, y_dim], label=label)
+            if plot_params['use_endpoint_markers']:
+                ax.plot(pos_est[:, x_dim], pos_est[:, y_dim],
+                        linewidth=plot_params['est_linewidth'],
+                        marker=next(endpoint_markers_iter), markevery=[pos_est.shape[0] - 1],
+                        label=label)
+            else:
+                ax.plot(pos_est[:, x_dim], pos_est[:, y_dim],
+                        linewidth=plot_params['est_linewidth'], label=label)
 
         ax.axis('equal')
         ax.minorticks_on()
-        ax.grid(which='both', linestyle=':', linewidth=0.2)
+        ax.grid(which='both', linestyle=':',
+                linewidth=plot_params['grid_linewidth'])
         ax.set_title('Trajectory')
         ax.set_xlabel('Easting (m)')
         ax.set_ylabel('Northing (m)')
@@ -79,9 +137,14 @@ class TrajectoryVisualizer:
                 outfile : full path and filename where the plot should be saved
                 **kwargs: additional keyword arguments passed to plt.subplots()
         """
+        # Grab plot parameters, pass the rest to subplots
+        plot_params = self._parse_kwargs(kwargs)
+
         # Use a sane default figsize if the user doesn't specify one
-        figsize = kwargs.get('figsize', (12, 4))
-        fig, ax = plt.subplots(1, 2, **dict(kwargs, figsize=figsize))
+        figsize = kwargs.get('figsize', (8, 3))
+        kwargs.update({'figsize': figsize})
+
+        fig, ax = plt.subplots(1, 2, **kwargs)
 
         for label, tm in self.tm_dict.items():
             segerr, avg_segerr = tm.segment_errors(segs)
@@ -92,13 +155,15 @@ class TrajectoryVisualizer:
                        * 180. / np.pi, '-s', label=label)
 
         ax[0].minorticks_on()
-        ax[0].grid(which='both', linestyle=':', linewidth=0.2)
+        ax[0].grid(which='both', linestyle=':',
+                   linewidth=plot_params['grid_linewidth'])
         ax[0].set_title('Translational error')
         ax[0].set_xlabel('Segment length (m)')
         ax[0].set_ylabel('Average error (\%)')
 
         ax[1].minorticks_on()
-        ax[1].grid(which='both', linestyle=':', linewidth=0.2)
+        ax[1].grid(which='both', linestyle=':',
+                   linewidth=plot_params['grid_linewidth'])
         ax[1].set_title('Rotational error')
         ax[1].set_xlabel('Segment length (m)')
         ax[1].set_ylabel('Average error (deg/m)')
@@ -119,9 +184,12 @@ class TrajectoryVisualizer:
                 outfile         : full path and filename where the plot should be saved
                 **kwargs        : additional keyword arguments passed to plt.subplots()
         """
+        # Grab plot parameters, pass the rest to subplots
+        plot_params = self._parse_kwargs(kwargs)
+
         # Use a sane default figsize if the user doesn't specify one
-        figsize = kwargs.get('figsize', (12, 4))
-        fig, ax = plt.subplots(1, 2, **dict(kwargs, figsize=figsize))
+        figsize = kwargs.get('figsize', (8, 3))
+        fig, ax = plt.subplots(1, 2, **kwargs)
 
         for label, tm in self.tm_dict.items():
             if segment_range is None:
@@ -141,14 +209,16 @@ class TrajectoryVisualizer:
             ax[1].plot(rot_err * 180. / np.pi, '-', label=label)
 
         ax[0].minorticks_on()
-        ax[0].grid(which='both', linestyle=':', linewidth=0.2)
+        ax[0].grid(which='both', linestyle=':',
+                   linewidth=plot_params['grid_linewidth'])
         # ax[0].set_xlim((segment_range.start, segment_range.stop - 1))
         ax[0].set_title('Translational {}'.format(err_name))
         ax[0].set_xlabel('Timestep')
         ax[0].set_ylabel('{} (m)'.format(err_name))
 
         ax[1].minorticks_on()
-        ax[1].grid(which='both', linestyle=':', linewidth=0.2)
+        ax[1].grid(which='both', linestyle=':',
+                   linewidth=plot_params['grid_linewidth'])
         # ax[1].set_xlim((segment_range.start, segment_range.stop - 1))
         ax[1].set_title('Rotational {}'.format(err_name))
         ax[1].set_xlabel('Timestep')

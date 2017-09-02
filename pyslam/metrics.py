@@ -154,10 +154,9 @@ class TrajectoryMetrics:
         pose_delta_est = self.Twv_est[segment_range[0]].inv().dot(
             self.Twv_est[segment_range[-1]])
 
-        pose_error = self.pose_type.log(
-            pose_delta_est.inv().dot(pose_delta_gt))
-        trans_err = np.linalg.norm(pose_error[0:3])
-        rot_err = np.linalg.norm(pose_error[3:6])
+        pose_err = pose_delta_est.inv().dot(pose_delta_gt)
+        trans_err = np.linalg.norm(pose_err.trans)
+        rot_err = np.linalg.norm(pose_err.rot.log())
 
         return self._convert_meters(trans_err, trans_unit), self._convert_radians(rot_err, rot_unit)
 
