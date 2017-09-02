@@ -19,8 +19,8 @@ class TrajectoryVisualizer:
         self.tm_dict = tm_dict
         """Dictionary of TrajectoryMetrics objects to plot."""
 
-        self.endpoint_markers_list = ['o', 'v', '^', '<', '>',
-                                      '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X']
+        self.endpoint_markers_list = ['o', '^', 's', '*', 'p', 'h',
+                                      'X', 'D', 'P',  'v', '<', '>', '8', 'H', 'd']
 
     def _parse_kwargs(self, kwargs):
         out = {}
