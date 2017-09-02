@@ -30,7 +30,7 @@ class TrajectoryVisualizer:
         plot_params['grid_linewidth'] = kwargs.get('grid_linewidth', 0.2)
         plot_params['use_endpoint_markers'] = kwargs.get(
             'use_endpoint_markers', False)
-        plot_params['fontsize'] = kwargs.get('fontsize', 16)
+        plot_params['fontsize'] = kwargs.get('fontsize', 10)
 
         for key in plot_params.keys():
             try:
