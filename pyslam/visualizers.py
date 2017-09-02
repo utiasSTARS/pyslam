@@ -20,36 +20,25 @@ class TrajectoryVisualizer:
         """Dictionary of TrajectoryMetrics objects to plot."""
 
         self.endpoint_markers_list = ['o', '^', 's', '*', 'p', 'h',
-                                      'X', 'D', 'P',  'v', '<', '>', '8', 'H', 'd']
+                                      'X', 'D', 'P',  'v', '<', '>',
+                                      '8', 'H', 'd']
 
     def _parse_kwargs(self, kwargs):
-        out = {}
-        out['gt_linewidth'] = kwargs.get('gt_linewidth', 2.)
-        out['est_linewidth'] = kwargs.get('est_linewidth', 1.)
-        out['grid_linewidth'] = kwargs.get('grid_linewidth', 0.2)
-        out['use_endpoint_markers'] = kwargs.get('use_endpoint_markers', False)
+        plot_params = {}
+        plot_params['gt_linewidth'] = kwargs.get('gt_linewidth', 2.)
+        plot_params['est_linewidth'] = kwargs.get('est_linewidth', 1.)
+        plot_params['grid_linewidth'] = kwargs.get('grid_linewidth', 0.2)
+        plot_params['use_endpoint_markers'] = kwargs.get(
+            'use_endpoint_markers', False)
+        plot_params['fontsize'] = kwargs.get('fontsize', 16)
 
-        try:
-            del kwargs['gt_linewidth']
-        except KeyError:
-            pass
+        for key in plot_params.keys():
+            try:
+                del kwargs[key]
+            except KeyError:
+                pass
 
-        try:
-            del kwargs['est_linewidth']
-        except KeyError:
-            pass
-
-        try:
-            del kwargs['grid_linewidth']
-        except KeyError:
-            pass
-
-        try:
-            del kwargs['use_endpoint_markers']
-        except KeyError:
-            pass
-
-        return out
+        return plot_params
 
     def plot_topdown(self, which_plane='xz', segment_range=None, outfile=None, **kwargs):
         """ Plot a top - down view of the trajectory.
@@ -117,10 +106,10 @@ class TrajectoryVisualizer:
         ax.minorticks_on()
         ax.grid(which='both', linestyle=':',
                 linewidth=plot_params['grid_linewidth'])
-        ax.set_title('Trajectory')
-        ax.set_xlabel('Easting (m)')
-        ax.set_ylabel('Northing (m)')
-        ax.legend()
+        ax.set_title('Trajectory', fontsize=plot_params['fontsize'])
+        ax.set_xlabel('Easting (m)', fontsize=plot_params['fontsize'])
+        ax.set_ylabel('Northing (m)', fontsize=plot_params['fontsize'])
+        ax.legend(fontsize=plot_params['fontsize'])
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
@@ -157,17 +146,22 @@ class TrajectoryVisualizer:
         ax[0].minorticks_on()
         ax[0].grid(which='both', linestyle=':',
                    linewidth=plot_params['grid_linewidth'])
-        ax[0].set_title('Translational error')
-        ax[0].set_xlabel('Segment length (m)')
-        ax[0].set_ylabel('Average error (\%)')
+        ax[0].set_title('Translational error',
+                        fontsize=plot_params['fontsize'])
+        ax[0].set_xlabel('Segment length (m)',
+                         fontsize=plot_params['fontsize'])
+        ax[0].set_ylabel('Average error (\%)',
+                         fontsize=plot_params['fontsize'])
 
         ax[1].minorticks_on()
         ax[1].grid(which='both', linestyle=':',
                    linewidth=plot_params['grid_linewidth'])
-        ax[1].set_title('Rotational error')
-        ax[1].set_xlabel('Segment length (m)')
-        ax[1].set_ylabel('Average error (deg/m)')
-        ax[1].legend()
+        ax[1].set_title('Rotational error', fontsize=plot_params['fontsize'])
+        ax[1].set_xlabel('Segment length (m)',
+                         fontsize=plot_params['fontsize'])
+        ax[1].set_ylabel('Average error (deg/m)',
+                         fontsize=plot_params['fontsize'])
+        ax[1].legend(fontsize=plot_params['fontsize'])
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
@@ -212,18 +206,22 @@ class TrajectoryVisualizer:
         ax[0].grid(which='both', linestyle=':',
                    linewidth=plot_params['grid_linewidth'])
         # ax[0].set_xlim((segment_range.start, segment_range.stop - 1))
-        ax[0].set_title('Translational {}'.format(err_name))
-        ax[0].set_xlabel('Timestep')
-        ax[0].set_ylabel('{} (m)'.format(err_name))
+        ax[0].set_title('Translational {}'.format(err_name),
+                        fontsize=plot_params['fontsize'])
+        ax[0].set_xlabel('Timestep', fontsize=plot_params['fontsize'])
+        ax[0].set_ylabel('{} (m)'.format(err_name),
+                         fontsize=plot_params['fontsize'])
 
         ax[1].minorticks_on()
         ax[1].grid(which='both', linestyle=':',
                    linewidth=plot_params['grid_linewidth'])
         # ax[1].set_xlim((segment_range.start, segment_range.stop - 1))
-        ax[1].set_title('Rotational {}'.format(err_name))
-        ax[1].set_xlabel('Timestep')
-        ax[1].set_ylabel('{} (deg)'.format(err_name))
-        ax[1].legend()
+        ax[1].set_title('Rotational {}'.format(err_name),
+                        fontsize=plot_params['fontsize'])
+        ax[1].set_xlabel('Timestep', fontsize=plot_params['fontsize'])
+        ax[1].set_ylabel('{} (deg)'.format(err_name),
+                         fontsize=plot_params['fontsize'])
+        ax[1].legend(fontsize=plot_params['fontsize'])
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
