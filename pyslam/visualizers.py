@@ -31,6 +31,7 @@ class TrajectoryVisualizer:
         plot_params['use_endpoint_markers'] = kwargs.get(
             'use_endpoint_markers', False)
         plot_params['fontsize'] = kwargs.get('fontsize', 10)
+        plot_params['err_xlabel'] = kwargs.get('err_xlabel', 'Timestep')
 
         for key in plot_params.keys():
             try:
@@ -187,13 +188,13 @@ class TrajectoryVisualizer:
 
         for label, tm in self.tm_dict.items():
             if segment_range is None:
-                segment_range = range(len(tm.Twv_gt))
+                this_segment_range = range(len(tm.Twv_gt))
 
             if err_type == 'norm':
-                trans_err, rot_err = tm.error_norms(segment_range)
+                trans_err, rot_err = tm.error_norms(this_segment_range)
                 err_name = 'Err. Norm.'
             elif err_type == 'cum':
-                trans_err, rot_err = tm.cum_err(segment_range)
+                trans_err, rot_err = tm.cum_err(this_segment_range)
                 err_name = 'Cumulative Err. Norm.'
             else:
                 raise ValueError(
@@ -208,7 +209,8 @@ class TrajectoryVisualizer:
         # ax[0].set_xlim((segment_range.start, segment_range.stop - 1))
         ax[0].set_title('Translational {}'.format(err_name),
                         fontsize=plot_params['fontsize'])
-        ax[0].set_xlabel('Timestep', fontsize=plot_params['fontsize'])
+        ax[0].set_xlabel(plot_params['err_xlabel'],
+                         fontsize=plot_params['fontsize'])
         ax[0].set_ylabel('{} (m)'.format(err_name),
                          fontsize=plot_params['fontsize'])
 
@@ -218,7 +220,8 @@ class TrajectoryVisualizer:
         # ax[1].set_xlim((segment_range.start, segment_range.stop - 1))
         ax[1].set_title('Rotational {}'.format(err_name),
                         fontsize=plot_params['fontsize'])
-        ax[1].set_xlabel('Timestep', fontsize=plot_params['fontsize'])
+        ax[1].set_xlabel(plot_params['err_xlabel'],
+                         fontsize=plot_params['fontsize'])
         ax[1].set_ylabel('{} (deg)'.format(err_name),
                          fontsize=plot_params['fontsize'])
         ax[1].legend(fontsize=plot_params['fontsize'])
