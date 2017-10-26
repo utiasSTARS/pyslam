@@ -1,7 +1,4 @@
 import numpy as np
-from numba import guvectorize, float32, float64, boolean
-
-NUMBA_COMPILATION_TARGET = 'parallel'
 
 
 class RGBDCamera:
@@ -14,24 +11,50 @@ class RGBDCamera:
         self.fv = float(fv)
         self.w = int(w)
         self.h = int(h)
-        self.K = np.array([[self.fu, 0., self.cu],
-                           [0., self.fv, self.cv],
-                           [0., 0., 1.]])
-        self.invK = np.linalg.inv(self.K)
+
+    def _valid_mask(self, uvz):
+        return (uvz[:, 2] > 0.) & \
+            (uvz[:, 1] > 0.) & (uvz[:, 1] < self.h) & \
+            (uvz[:, 0] > 0.) & (uvz[:, 0] < self.w)
 
     def is_valid_measurement(self, uvz):
         """Check if one or more uvz measurements is valid.
-           Returns indices of valid measurements.
+           Returns boolean mask of valid measurements.
         """
         uvz = np.atleast_2d(uvz)
 
         if not uvz.shape[1] == 3:
             raise ValueError("uvz must have shape (3,) or (N,3)")
 
-        return _rgbd_validate(uvz, [self.w, self.h])
+        return np.squeeze(self._valid_mask(uvz))
+
+    def _project(self, pt_c, out):
+        one_over_z = 1. / pt_c[:, 2]
+        out[:, 0] = self.fu * pt_c[:, 0] * one_over_z + self.cu
+        out[:, 1] = self.fv * pt_c[:, 1] * one_over_z + self.cv
+        out[:, 2] = pt_c[:, 2]
+
+    def _project_jacobian(self, pt_c, out):
+        one_over_z = 1. / pt_c[:, 2]
+        one_over_z2 = one_over_z * one_over_z
+
+        # d(u) / d(pt_c)
+        out[:, 0, 0] = self.fu * one_over_z
+        out[:, 0, 1] = 0.
+        out[:, 0, 2] = -self.fu * pt_c[:, 0] * one_over_z2
+
+        # d(v) / d(pt_c)
+        out[:, 1, 0] = 0.
+        out[:, 1, 1] = self.fv * one_over_z
+        out[:, 1, 2] = -self.fv * pt_c[:, 1] * one_over_z2
+
+        # d(d) / d(pt_c)
+        out[:, 2, 0] = 0.
+        out[:, 2, 1] = 0.
+        out[:, 2, 2] = 1.
 
     def project(self, pt_c, compute_jacobians=None):
-        """Project 3D point(s) in the sensor frame into (u,v,d) coordinates."""
+        """Project 3D point(s) in the sensor frame into (u,v,z) coordinates."""
         # Convert to 2D array if it's just a single point.
         # We'll remove any singleton dimensions at the end.
         pt_c = np.atleast_2d(pt_c)
@@ -40,18 +63,43 @@ class RGBDCamera:
             raise ValueError("pt_c must have shape (3,) or (N,3)")
 
         # Now do the actual math
-        params = self.cu, self.cv, self.fu, self.fv
-        uvz = _rgbd_project(pt_c, params)
+        uvz = np.empty(pt_c.shape)
+        self._project(pt_c, uvz)
 
         if compute_jacobians:
-            jacobians = _rgbd_project_jacobian(pt_c, params)
+            jacobians = np.empty([pt_c.shape[0], 3, 3])
+            self._project_jacobian(pt_c, jacobians)
 
             return np.squeeze(uvz), np.squeeze(jacobians)
 
         return np.squeeze(uvz)
 
+    def _triangulate(self, uvz, out):
+        out[:, 0] = (uvz[:, 0] - self.cu) * uvz[:, 2] / self.fu
+        out[:, 1] = (uvz[:, 1] - self.cv) * uvz[:, 2] / self.fv
+        out[:, 2] = uvz[:, 2]
+
+    def _triangulate_jacobian(self, uvz, out):
+        one_over_fu = 1. / self.fu
+        one_over_fv = 1. / self.fv
+
+        # d(x) / d(uvz)
+        out[:, 0, 0] = uvz[:, 2] * one_over_fu
+        out[:, 0, 1] = 0.
+        out[:, 0, 2] = (uvz[:, 0] - self.cu) * one_over_fu
+
+        # d(y) / d(uvz)
+        out[:, 1, 0] = 0.
+        out[:, 1, 1] = uvz[:, 2] * one_over_fv
+        out[:, 1, 2] = (uvz[:, 1] - self.cv) * one_over_fv
+
+        # d(z) / d(uvz)
+        out[:, 2, 0] = 0.
+        out[:, 2, 1] = 0.
+        out[:, 2, 2] = 1.
+
     def triangulate(self, uvz, compute_jacobians=None):
-        """Triangulate 3D point(s) in the sensor frame from (u,v,d)."""
+        """Triangulate 3D point(s) in the sensor frame from (u,v,z)."""
         # Convert to 2D array if it's just a single point
         # We'll remove any singleton dimensions at the end.
         uvz = np.atleast_2d(uvz)
@@ -60,102 +108,70 @@ class RGBDCamera:
             raise ValueError("uvz must have shape (3,) or (N,3)")
 
         # Now do the actual math
-        params = self.cu, self.cv, self.fu, self.fv
-        pt_c = _rgbd_triangulate(uvz, params)
+        pt_c = np.empty(uvz.shape)
+        self._triangulate(uvz, pt_c)
 
         if compute_jacobians:
-            jacobians = _rgbd_triangulate_jacobian(uvz, params)
+            jacobians = np.empty([uvz.shape[0], 3, 3])
+            self._triangulate_jacobian(uvz, jacobians)
 
             return np.squeeze(pt_c), np.squeeze(jacobians)
 
         return np.squeeze(pt_c)
 
     def __repr__(self):
-        return "{}:\n cu: {:f}\n cv: {:f}\n fu: {:f}\n fv: {:f}\n" \
-               "  b: {:f}\n  w: {:d}\n  h: {:d}\n".format(self.__class__.__name__,
-                                                          self.cu, self.cv,
-                                                          self.fu, self.fv,
-                                                          self.w, self.h)
+        return "{}:\n| cu: {:f}\n| cv: {:f}\n| fu: {:f}\n| fv: {:f}\n|" \
+               " w: {:d}\n|  h: {:d}\n".format(
+                   self.__class__.__name__,
+                   self.cu, self.cv,
+                   self.fu, self.fv,
+                   self.w, self.h)
 
 
-@guvectorize([(float32[:], float32[:], boolean[:]),
-              (float64[:], float64[:], boolean[:])],
-             '(n),(m)->()', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _rgbd_validate(uvz, imshape, out):
-    w, h = imshape
-    out[0] = (uvz[2] > 0.) & \
-        (uvz[1] > 0.) & (uvz[1] < h) & \
-        (uvz[0] > 0.) & (uvz[0] < w)
+class RGBDCameraTorch(RGBDCamera):
+    """Torch specialization of RGBDCamera."""
 
+    def is_valid_measurement(self, uvz):
+        if uvz.dim() < 2:
+            uvz = uvz.unsqueeze(dim=0)
 
-@guvectorize([(float32[:], float32[:], float32[:]),
-              (float64[:], float64[:], float64[:])],
-             '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _rgbd_project(pt_c, params, out):
-    cu, cv, fu, fv = params
+        if not uvz.shape[1] == 3:
+            raise ValueError("uvz must have shape (3,) or (N,3)")
 
-    one_over_z = 1. / pt_c[2]
-    out[0] = fu * pt_c[0] * one_over_z + cu
-    out[1] = fv * pt_c[1] * one_over_z + cv
-    out[2] = pt_c[2]
+        return self._valid_mask(uvz).squeeze_()
 
+    def project(self, pt_c, compute_jacobians=None):
+        if pt_c.dim() < 2:
+            pt_c = pt_c.unsqueeze(dim=0)
 
-@guvectorize([(float32[:], float32[:], float32[:, :]),
-              (float64[:], float64[:], float64[:, :])],
-             '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _rgbd_project_jacobian(pt_c, params, out):
-    cu, cv, fu, fv = params
+        if not pt_c.shape[1] == 3:
+            raise ValueError("pt_c must have shape (3,) or (N,3)")
 
-    one_over_z = 1. / pt_c[2]
-    one_over_z2 = one_over_z * one_over_z
+        uvz = pt_c.__class__(pt_c.shape)
+        self._project(pt_c, uvz)
 
-    # d(u) / d(pt_c)
-    out[0, 0] = fu * one_over_z
-    out[0, 1] = 0.
-    out[0, 2] = -fu * pt_c[0] * one_over_z2
+        if compute_jacobians:
+            jacobians = pt_c.__class__(pt_c.shape[0], 3, 3)
+            self._project_jacobian(uvz, jacobians)
 
-    # d(v) / d(pt_c)
-    out[1, 0] = 0.
-    out[1, 1] = fv * one_over_z
-    out[1, 2] = -fv * pt_c[1] * one_over_z2
+            return uvz.squeeze_(), jacobians.squeeze_()
 
-    # d(d) / d(pt_c)
-    out[2, 0] = 0.
-    out[2, 1] = 0.
-    out[2, 2] = 1.
+        return uvz.squeeze_()
 
+    def triangulate(self, uvz, compute_jacobians=None):
+        if uvz.dim() < 2:
+            uvz = uvz.unsqueeze(dim=0)
 
-@guvectorize([(float32[:], float32[:], float32[:]),
-              (float64[:], float64[:], float64[:])],
-             '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _rgbd_triangulate(uvz, params, out):
-    cu, cv, fu, fv = params
+        if not uvz.shape[1] == 3:
+            raise ValueError("uvz must have shape (3,) or (N,3)")
 
-    out[0] = (uvz[0] - cu) * uvz[2] / fu
-    out[1] = (uvz[1] - cv) * uvz[2] / fv
-    out[2] = uvz[2]
+        pt_c = uvz.__class__(uvz.shape)
+        self._triangulate(uvz, pt_c)
 
+        if compute_jacobians:
+            jacobians = uvz.__class__(uvz.shape[0], 3, 3)
+            self._triangulate_jacobian(pt_c, jacobians)
 
-@guvectorize([(float32[:], float32[:], float32[:, :]),
-              (float64[:], float64[:], float64[:, :])],
-             '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _rgbd_triangulate_jacobian(uvz, params, out):
-    cu, cv, fu, fv = params
+            return pt_c.squeeze_(), jacobians.squeeze_()
 
-    one_over_fu = 1. / fu
-    one_over_fv = 1. / fv
-
-    # d(x) / d(uvz)
-    out[0, 0] = uvz[2] * one_over_fu
-    out[0, 1] = 0.
-    out[0, 2] = (uvz[0] - cu) * one_over_fu
-
-    # d(y) / d(uvz)
-    out[1, 0] = 0.
-    out[1, 1] = uvz[2] * one_over_fv
-    out[1, 2] = (uvz[1] - cv) * one_over_fv
-
-    # d(z) / d(uvz)
-    out[2, 0] = 0.
-    out[2, 1] = 0.
-    out[2, 2] = 1.
+        return pt_c.squeeze_()

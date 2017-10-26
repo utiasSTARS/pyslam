@@ -1,7 +1,4 @@
 import numpy as np
-from numba import guvectorize, float32, float64, boolean
-
-NUMBA_COMPILATION_TARGET = 'parallel'
 
 
 class StereoCamera:
@@ -15,153 +12,165 @@ class StereoCamera:
         self.b = float(b)
         self.w = int(w)
         self.h = int(h)
-        self.K = np.array([[self.fu, 0., self.cu],
-                           [0., self.fv, self.cv],
-                           [0., 0., 1.]])
-        self.invK = np.linalg.inv(self.K)
+
+    def _valid_mask(self, uvd):
+        return (uvd[:, 2] > 0.) & (uvd[:, 2] < self.w) & \
+            (uvd[:, 1] > 0.) & (uvd[:, 1] < self.h) & \
+            (uvd[:, 0] > 0.) & (uvd[:, 0] < self.w)
 
     def is_valid_measurement(self, uvd):
         """Check if one or more uvd measurements is valid.
-           Returns indices of valid measurements.
+           Returns boolean mask of valid measurements.
         """
         uvd = np.atleast_2d(uvd)
 
         if not uvd.shape[1] == 3:
             raise ValueError("uvd must have shape (3,) or (N,3)")
 
-        return _stereo_validate(uvd, [self.w, self.h])
+        return np.squeeze(self._valid_mask(uvd))
+
+    def _project(self, pt_c, out):
+        one_over_z = 1. / pt_c[:, 2]
+        out[:, 0] = self.fu * pt_c[:, 0] * one_over_z + self.cu
+        out[:, 1] = self.fv * pt_c[:, 1] * one_over_z + self.cv
+        out[:, 2] = self.fu * self.b * one_over_z
+
+    def _project_jacobian(self, pt_c, out):
+        one_over_z = 1. / pt_c[:, 2]
+        one_over_z2 = one_over_z * one_over_z
+
+        # d(u) / d(pt_c)
+        out[:, 0, 0] = self.fu * one_over_z
+        out[:, 0, 1] = 0.
+        out[:, 0, 2] = -self.fu * pt_c[:, 0] * one_over_z2
+
+        # d(v) / d(pt_c)
+        out[:, 1, 0] = 0.
+        out[:, 1, 1] = self.fv * one_over_z
+        out[:, 1, 2] = -self.fv * pt_c[:, 1] * one_over_z2
+
+        # d(d) / d(pt_c)
+        out[:, 2, 0] = 0.
+        out[:, 2, 1] = 0.
+        out[:, 2, 2] = -self.fu * self.b * one_over_z2
 
     def project(self, pt_c, compute_jacobians=None):
         """Project 3D point(s) in the sensor frame into (u,v,d) coordinates."""
-        # Convert to 2D array if it's just a single point.
-        # We'll remove any singleton dimensions at the end.
         pt_c = np.atleast_2d(pt_c)
 
         if not pt_c.shape[1] == 3:
             raise ValueError("pt_c must have shape (3,) or (N,3)")
 
-        # Now do the actual math
-        params = self.cu, self.cv, self.fu, self.fv, self.b
-        uvd = _stereo_project(pt_c, params)
+        uvd = np.empty(pt_c.shape)
+        self._project(pt_c, uvd)
 
         if compute_jacobians:
-            jacobians = _stereo_project_jacobian(pt_c, params)
+            jacobians = np.empty([pt_c.shape[0], 3, 3])
+            self._project_jacobian(pt_c, jacobians)
 
             return np.squeeze(uvd), np.squeeze(jacobians)
 
         return np.squeeze(uvd)
 
+    def _triangulate(self, uvd, out):
+        b_over_d = self.b / uvd[:, 2]
+        fu_over_fv = self.fu / self.fv
+
+        out[:, 0] = (uvd[:, 0] - self.cu) * b_over_d
+        out[:, 1] = (uvd[:, 1] - self.cv) * b_over_d * fu_over_fv
+        out[:, 2] = self.fu * b_over_d
+
+    def _triangulate_jacobian(self, uvd, out):
+        b_over_d = self.b / uvd[:, 2]
+        b_over_d2 = b_over_d / uvd[:, 2]
+        fu_over_fv = self.fu / self.fv
+
+        # d(x) / d(uvd)
+        out[:, 0, 0] = b_over_d
+        out[:, 0, 1] = 0.
+        out[:, 0, 2] = (self.cu - uvd[:, 0]) * b_over_d2
+
+        # d(y) / d(uvd)
+        out[:, 1, 0] = 0.
+        out[:, 1, 1] = b_over_d * fu_over_fv
+        out[:, 1, 2] = (self.cv - uvd[:, 1]) * b_over_d2 * fu_over_fv
+
+        # d(z) / d(uvd)
+        out[:, 2, 0] = 0.
+        out[:, 2, 1] = 0.
+        out[:, 2, 2] = -self.fu * b_over_d2
+
     def triangulate(self, uvd, compute_jacobians=None):
         """Triangulate 3D point(s) in the sensor frame from (u,v,d)."""
-        # Convert to 2D array if it's just a single point
-        # We'll remove any singleton dimensions at the end.
         uvd = np.atleast_2d(uvd)
 
         if not uvd.shape[1] == 3:
             raise ValueError("uvd must have shape (3,) or (N,3)")
 
-        # Now do the actual math
-        params = self.cu, self.cv, self.fu, self.fv, self.b
-        pt_c = _stereo_triangulate(uvd, params)
+        pt_c = np.empty(uvd.shape)
+        self._triangulate(uvd, pt_c)
 
         if compute_jacobians:
-            jacobians = _stereo_triangulate_jacobian(uvd, params)
+            jacobians = np.empty([uvd.shape[0], 3, 3])
+            self._triangulate_jacobian(uvd, jacobians)
 
             return np.squeeze(pt_c), np.squeeze(jacobians)
 
         return np.squeeze(pt_c)
 
     def __repr__(self):
-        return "{}:\n cu: {:f}\n cv: {:f}\n fu: {:f}\n fv: {:f}\n" \
-               "  b: {:f}\n  w: {:d}\n  h: {:d}\n".format(self.__class__.__name__,
-                                                          self.cu, self.cv,
-                                                          self.fu, self.fv,
-                                                          self.b,
-                                                          self.w, self.h)
+        return "{}:\n| cu: {:f}\n| cv: {:f}\n| fu: {:f}\n| fv: {:f}\n|" \
+               "  b: {:f}\n|  w: {:d}\n|  h: {:d}\n".format(
+                   self.__class__.__name__, self.cu, self.cv,
+                   self.fu, self.fv,
+                   self.b,
+                   self.w, self.h)
 
 
-@guvectorize([(float32[:], float32[:], boolean[:]),
-              (float64[:], float64[:], boolean[:])],
-             '(n),(m)->()', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_validate(uvd, imshape, out):
-    w, h = imshape
-    out[0] = (uvd[2] > 0.) & (uvd[2] < w) & \
-        (uvd[1] > 0.) & (uvd[1] < h) & \
-        (uvd[0] > 0.) & (uvd[0] < w)
+class StereoCameraTorch(StereoCamera):
+    """Torch specialization of StereoCamera."""
 
+    def is_valid_measurement(self, uvd):
+        if uvd.dim() < 2:
+            uvd = uvd.unsqueeze(dim=0)
 
-@guvectorize([(float32[:], float32[:], float32[:]),
-              (float64[:], float64[:], float64[:])],
-             '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_project(pt_c, params, out):
-    cu, cv, fu, fv, b = params
+        if not uvd.shape[1] == 3:
+            raise ValueError("uvd must have shape (3,) or (N,3)")
 
-    one_over_z = 1. / pt_c[2]
-    out[0] = fu * pt_c[0] * one_over_z + cu
-    out[1] = fv * pt_c[1] * one_over_z + cv
-    out[2] = fu * b * one_over_z
+        return self._valid_mask(uvd).squeeze_()
 
+    def project(self, pt_c, compute_jacobians=None):
+        if pt_c.dim() < 2:
+            pt_c = pt_c.unsqueeze(dim=0)
 
-@guvectorize([(float32[:], float32[:], float32[:, :]),
-              (float64[:], float64[:], float64[:, :])],
-             '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_project_jacobian(pt_c, params, out):
-    cu, cv, fu, fv, b = params
+        if not pt_c.shape[1] == 3:
+            raise ValueError("pt_c must have shape (3,) or (N,3)")
 
-    one_over_z = 1. / pt_c[2]
-    one_over_z2 = one_over_z * one_over_z
+        uvd = pt_c.__class__(pt_c.shape)
+        self._project(pt_c, uvd)
 
-    # d(u) / d(pt_c)
-    out[0, 0] = fu * one_over_z
-    out[0, 1] = 0.
-    out[0, 2] = -fu * pt_c[0] * one_over_z2
+        if compute_jacobians:
+            jacobians = pt_c.__class__(pt_c.shape[0], 3, 3)
+            self._project_jacobian(uvd, jacobians)
 
-    # d(v) / d(pt_c)
-    out[1, 0] = 0.
-    out[1, 1] = fv * one_over_z
-    out[1, 2] = -fv * pt_c[1] * one_over_z2
+            return uvd.squeeze_(), jacobians.squeeze_()
 
-    # d(d) / d(pt_c)
-    out[2, 0] = 0.
-    out[2, 1] = 0.
-    out[2, 2] = -fu * b * one_over_z2
+        return uvd.squeeze_()
 
+    def triangulate(self, uvd, compute_jacobians=None):
+        if uvd.dim() < 2:
+            uvd = uvd.unsqueeze(dim=0)
 
-@guvectorize([(float32[:], float32[:], float32[:]),
-              (float64[:], float64[:], float64[:])],
-             '(n),(m)->(n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_triangulate(uvd, params, out):
-    cu, cv, fu, fv, b = params
+        if not uvd.shape[1] == 3:
+            raise ValueError("uvd must have shape (3,) or (N,3)")
 
-    b_over_d = b / uvd[2]
-    fu_over_fv = fu / fv
+        pt_c = uvd.__class__(uvd.shape)
+        self._triangulate(uvd, pt_c)
 
-    out[0] = (uvd[0] - cu) * b_over_d
-    out[1] = (uvd[1] - cv) * b_over_d * fu_over_fv
-    out[2] = fu * b_over_d
+        if compute_jacobians:
+            jacobians = uvd.__class__(uvd.shape[0], 3, 3)
+            self._triangulate_jacobian(pt_c, jacobians)
 
+            return pt_c.squeeze_(), jacobians.squeeze_()
 
-@guvectorize([(float32[:], float32[:], float32[:, :]),
-              (float64[:], float64[:], float64[:, :])],
-             '(n),(m)->(n,n)', nopython=True, cache=True, target=NUMBA_COMPILATION_TARGET)
-def _stereo_triangulate_jacobian(uvd, params, out):
-    cu, cv, fu, fv, b = params
-
-    b_over_d = b / uvd[2]
-    b_over_d2 = b_over_d / uvd[2]
-    fu_over_fv = fu / fv
-
-    # d(x) / d(uvd)
-    out[0, 0] = b_over_d
-    out[0, 1] = 0.
-    out[0, 2] = (cu - uvd[0]) * b_over_d2
-
-    # d(y) / d(uvd)
-    out[1, 0] = 0.
-    out[1, 1] = b_over_d * fu_over_fv
-    out[1, 2] = (cv - uvd[1]) * b_over_d2 * fu_over_fv
-
-    # d(z) / d(uvd)
-    out[2, 0] = 0.
-    out[2, 1] = 0.
-    out[2, 2] = -fu * b_over_d2
+        return pt_c.squeeze_()

@@ -1,11 +1,13 @@
 import copy
 import numpy as np
+import torch
 
 import cv2
 
 from liegroups import SE3
 from pyslam.problem import Options, Problem
-from pyslam.sensors import StereoCamera, RGBDCamera
+from pyslam.sensors import StereoCameraTorch as StereoCamera
+from pyslam.sensors import RGBDCameraTorch as RGBDCamera
 from pyslam.residuals import PhotometricResidualSE3
 from pyslam.losses import TDistributionLoss, L2Loss, HuberLoss
 
@@ -83,7 +85,7 @@ class DenseVOPipeline:
         """
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
-            trackframe.compute_pyramids()
+            trackframe.compute_pyramids(cuda=True)
             self.keyframes.append(trackframe)
             self.active_keyframe_idx = 0
             active_keyframe = self.keyframes[0]
@@ -179,7 +181,7 @@ class DenseVOPipeline:
             # problem.set_parameters_constant('R_1_0')
 
             params = problem.solve()
-            # print(problem.summary(format='brief'))
+            print(problem.summary(format='brief'))
 
             # # DEBUG: Store residuals for later
             # try:

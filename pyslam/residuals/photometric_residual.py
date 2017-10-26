@@ -1,53 +1,9 @@
 import numpy as np
-import scipy.interpolate
+import torch
 import time
 
-from liegroups import SE3
-from pyslam.utils import stackmul, bilinear_interpolate
-
-from numba import guvectorize, float32, float64
-
-
-SE3_ODOT_SHAPE = np.empty(6)
-
-
-@guvectorize([(float32[:], float32[:, :]),
-              (float64[:], float64[:, :])],
-             '(n)->(n,n)', nopython=True, cache=True, target='parallel')
-def fast_neg_so3_wedge(vec, out):
-    out[0, 0] = 0.
-    out[0, 1] = vec[2]
-    out[0, 2] = -vec[1]
-    out[1, 0] = -vec[2]
-    out[1, 1] = 0.
-    out[1, 2] = vec[0]
-    out[2, 0] = vec[1]
-    out[2, 1] = -vec[0]
-    out[2, 2] = 0.
-
-
-@guvectorize([(float32[:], float32[:], float32[:, :]),
-              (float64[:], float64[:], float64[:, :])],
-             '(n),(m)->(n,m)', nopython=True, cache=True, target='parallel')
-def fast_se3_odot(vec, junk, out):
-    out[0, 0] = 1.
-    out[0, 1] = 0.
-    out[0, 2] = 0.
-    out[0, 3] = 0.
-    out[0, 4] = vec[2]
-    out[0, 5] = -vec[1]
-    out[1, 0] = 0.
-    out[1, 1] = 1.
-    out[1, 2] = 0.
-    out[1, 3] = -vec[2]
-    out[1, 4] = 0.
-    out[1, 5] = vec[0]
-    out[2, 0] = 0.
-    out[2, 1] = 0.
-    out[2, 2] = 1.
-    out[2, 3] = vec[1]
-    out[2, 4] = -vec[0]
-    out[2, 5] = 0.
+from liegroups.torch import SO3, SE3
+from pyslam.utils import bilinear_interpolate
 
 
 class PhotometricResidualSO3:
@@ -116,17 +72,24 @@ class PhotometricResidualSE3:
     def __init__(self, camera, im_ref, depth_ref, im_track, im_jac,
                  intensity_stiffness, depth_stiffness, min_grad=0.):
         """Depth image and stiffness parameter can also be disparity."""
+        self.use_cuda = im_ref.is_cuda
+
         self.camera = camera
-        self.im_ref = im_ref.ravel()
+        self.im_ref = torch.FloatTensor(im_ref).view(-1)
+        self.im_ref.pin_memory()
 
         u_range = range(0, self.camera.w)
         v_range = range(0, self.camera.h)
         u_coords, v_coords = np.meshgrid(u_range, v_range, indexing='xy')
-        self.uvd_ref = np.vstack([u_coords.ravel(),
-                                  v_coords.ravel(),
-                                  depth_ref.ravel()]).T
-        self.im_jac = np.vstack([im_jac[0].ravel(),
-                                 im_jac[1].ravel()]).T
+
+        u_coords = torch.FloatTensor(u_coords.astype(np.float)).view(-1, 1)
+        v_coords = torch.FloatTensor(v_coords.astype(np.float)).view(-1, 1)
+        d_coords = torch.FloatTensor(depth_ref).view(-1, 1)
+
+        self.uvd_ref = torch.cat(
+            [u_coords, v_coords, d_coords], dim=1).pin_memory()
+
+        self.im_jac = im_jac.view(2, -1).transpose_(0, 1)
 
         self.im_track = im_track
 
@@ -138,30 +101,46 @@ class PhotometricResidualSE3:
         self.min_grad = min_grad
 
         # Filter out invalid pixels (NaN or negative depth)
-        valid_pixels = self.camera.is_valid_measurement(self.uvd_ref)
-        self.uvd_ref = self.uvd_ref.compress(valid_pixels, axis=0)
-        self.im_ref = self.im_ref.compress(valid_pixels)
-        self.im_jac = self.im_jac.compress(valid_pixels, axis=0)
+        valid_pixels = self.camera.is_valid_measurement(
+            self.uvd_ref).nonzero().squeeze_()
+        self.uvd_ref = self.uvd_ref[valid_pixels, :]
+        self.im_ref = self.im_ref[valid_pixels]
+        self.im_jac = self.im_jac[valid_pixels, :]
 
         # Filter out pixels with weak gradients
-        grad_ref = np.linalg.norm(self.im_jac, axis=1)
-        strong_pixels = grad_ref >= self.min_grad
-        self.uvd_ref = self.uvd_ref.compress(strong_pixels, axis=0)
-        self.im_ref = self.im_ref.compress(strong_pixels)
-        self.im_jac = self.im_jac.compress(strong_pixels, axis=0)
+        grad_ref = self.im_jac.norm(p=2, dim=1)
+        strong_pixels = (grad_ref >= self.min_grad).nonzero().squeeze_()
+        self.uvd_ref = self.uvd_ref[strong_pixels, :]
+        self.im_ref = self.im_ref[strong_pixels]
+        self.im_jac = self.im_jac[strong_pixels, :]
 
         # Precompute triangulated 3D points
         self.pt_ref, self.triang_jac = self.camera.triangulate(
             self.uvd_ref, compute_jacobians=True)
+        self.pt_ref = self.pt_ref.pin_memory()
+        self.triang_jac = self.triang_jac.pin_memory()
+
+        # Move to GPU
+        if self.use_cuda:
+            self.im_ref = self.im_ref.cuda(async=True)
+            self.im_track = self.im_track.cuda(async=True)
+            self.uvd_ref = self.uvd_ref.cuda(async=True)
+            self.im_jac = self.im_jac.cuda(async=True)
+            self.pt_ref = self.pt_ref.cuda(async=True)
+            self.triang_jac = self.triang_jac.cuda(async=True)
 
     def evaluate(self, params, compute_jacobians=None):
         if len(params) == 1:
-            T_track_ref = params[0]
+            T_track_ref = SE3.from_numpy(params[0], pin_memory=True)
         elif len(params) == 2:
-            T_track_ref = SE3(params[0], params[1])
+            T_track_ref = SE3(SO3.from_numpy(params[0], pin_memory=True),
+                              torch.Tensor(params[1]).pin_memory())
         else:
             raise ValueError(
                 'In PhotometricResidual.evaluate() params must have length 1 or 2')
+
+        if self.use_cuda:
+            T_track_ref = T_track_ref.cuda(async=True)
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image
@@ -171,46 +150,52 @@ class PhotometricResidualSE3:
 
         # Filter out bad measurements
         # where returns a tuple
-        valid_pixels = self.camera.is_valid_measurement(uvd_track)
+        valid_pixels = self.camera.is_valid_measurement(
+            uvd_track).nonzero().squeeze_()
+
+        pt_track = pt_track[valid_pixels, :]
+        uvd_track = uvd_track[valid_pixels, :]
+        im_jac = self.im_jac[valid_pixels, :].unsqueeze_(dim=1)
+        project_jac = project_jac[valid_pixels, :, :]
+        triang_jac = self.triang_jac[valid_pixels, :, :]
 
         # The residual is the intensity difference between the estimated
         # reference image pixels and the true reference image pixels
-        # This is actually faster than filtering the intermediate results!
         im_ref_est = bilinear_interpolate(self.im_track,
                                           uvd_track[:, 0],
                                           uvd_track[:, 1])
-        residual = (im_ref_est - self.im_ref).compress(valid_pixels)
+        residual = im_ref_est - self.im_ref[valid_pixels]
 
         # We need the jacobian of the residual w.r.t. the depth
         # to compute a reasonable stiffness paramater
-        # This is actually faster than filtering the intermediate results!
-        im_proj_jac = stackmul(self.im_jac[:, np.newaxis, :],
-                               project_jac[:, 0:2, :])  # Nx1x3
-        temp = stackmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
-        im_depth_jac = np.squeeze(stackmul(temp, self.triang_jac[:, :, 2:3])).compress(
-            valid_pixels, axis=0)  # Nx1x1
+        im_proj_jac = im_jac.bmm(project_jac[:, 0:2, :])  # Nx1x3
+        im_depth_jac = im_proj_jac.bmm(
+            T_track_ref.rot.as_matrix().unsqueeze(dim=0).expand(
+                im_proj_jac.shape[0], 3, 3)).bmm(
+            triang_jac[:, :, 2:3])  # Nx1x1
 
         # Compute the overall stiffness
         # \sigma^2 = \sigma^2_I + J_d \sigma^2_d J_d^T
-        stiffness = 1. / np.sqrt(self.intensity_covar +
-                                 self.depth_covar * im_depth_jac**2)
+        stiffness = 1. / (self.intensity_covar +
+                          self.depth_covar * im_depth_jac**2).sqrt_().squeeze_()
         # stiffness = self.intensity_stiffness
         residual = stiffness * residual
+        residual = residual.cpu().numpy().astype(float)
 
         # DEBUG: Rebuild residual and depth images
-        # self._rebuild_images(residual, im_ref_est, self.im_ref, valid_pixels)
+        # self._rebuild_images(residual,
+        #                      im_ref_est.cpu().numpy().astype(float),
+        #                      self.im_ref.cpu().numpy().astype(float),
+        #                      valid_pixels.cpu().numpy().astype(int))
         # import ipdb
         # ipdb.set_trace()
 
         # Jacobian time!
         if compute_jacobians:
             if any(compute_jacobians):
-                # This is actually faster than filtering the intermediate
-                # results!
-                odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
-                jac = np.squeeze(stackmul(im_proj_jac, odot_pt_track)).compress(
-                    valid_pixels, axis=0)
-                jac = (stiffness * jac.T).T
+                jac = im_proj_jac.bmm(SE3.odot(pt_track)).squeeze_()
+                jac = stiffness.unsqueeze(dim=1).expand_as(jac) * jac
+                jac = jac.cpu().numpy().astype(float)
 
             if len(params) == 1:
                 # SE3 case
@@ -237,7 +222,7 @@ class PhotometricResidualSE3:
     def _rebuild_images(self, residual, im_ref_est, im_ref_true, valid_pixels):
         """Debug function to rebuild the filtered
         residual and depth images as a sanity check"""
-        uvd_ref = self.uvd_ref[valid_pixels]
+        uvd_ref = self.uvd_ref.cpu().numpy().astype(float)[valid_pixels, :]
         imshape = (self.camera.h, self.camera.w)
 
         self.actual_reference_image = np.full(imshape, np.nan)

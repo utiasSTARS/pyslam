@@ -8,5 +8,5 @@ setup(
     author_email='lee.clement@robotics.utias.utoronto.ca',
     license='MIT',
     packages=['pyslam'],
-    install_requires=['numpy', 'scipy', 'numba', 'liegroups']
+    install_requires=['numpy', 'scipy', 'torch', 'liegroups']
 )

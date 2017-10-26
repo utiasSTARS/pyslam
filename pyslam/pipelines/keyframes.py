@@ -2,13 +2,11 @@ import numpy as np
 
 import cv2
 
-from liegroups import SE3
-
 
 class Keyframe:
     """Keyframe base class"""
 
-    def __init__(self, data, T_c_w=SE3.identity()):
+    def __init__(self, data, T_c_w=None):
         self.data = data
         """Image data (tuple or list)"""
         self.T_c_w = T_c_w
@@ -18,7 +16,7 @@ class Keyframe:
 class DenseKeyframe(Keyframe):
     """Dense keyframe base class"""
 
-    def __init__(self, data, pyrimage, pyrlevels, T_c_w=SE3.identity()):
+    def __init__(self, data, pyrimage, pyrlevels, T_c_w=None):
         super().__init__(data, T_c_w)
 
         self.pyrlevels = pyrlevels
@@ -27,7 +25,7 @@ class DenseKeyframe(Keyframe):
         self.compute_image_pyramid(pyrimage)
         """Image pyramid"""
 
-    def compute_image_pyramid(self, pyrimage):
+    def compute_image_pyramid(self, pyrimage, cuda=False):
         """Compute an image pyramid."""
 
         for pyrlevel in range(self.pyrlevels):
@@ -38,18 +36,28 @@ class DenseKeyframe(Keyframe):
 
         self.im_pyr = [im.astype(float) / 255. for im in im_pyr]
 
-    def compute_jacobian_pyramid(self):
+        if cuda:
+            self.im_pyr = torch.Tensor(
+                self.im_pyr).pin_memory().cuda(async=True)
+
+    def compute_jacobian_pyramid(self, cuda=False):
         self.jacobian = []
         for im in self.im_pyr:
             gradx = 0.5 * cv2.Sobel(im, -1, 1, 0)
             grady = 0.5 * cv2.Sobel(im, -1, 0, 1)
             self.jacobian.append(np.array([gradx, grady]))
+            if cuda:
+                self.jacobian = torch.Tensor(
+                    self.jacobian).pin_memory().cuda(async=True)
+
+    def cuda(self):
+        self.data = torch.Tensor(self.data).pin_memory().cuda(async=True)
 
 
 class DenseRGBDKeyframe(DenseKeyframe):
     """Dense RGBD keyframe"""
 
-    def __init__(self, image, depth, pyrlevels=0, T_c_w=SE3.identity()):
+    def __init__(self, image, depth, pyrlevels=0, T_c_w=None):
         super().__init__((image, depth), image, pyrlevels, T_c_w)
 
     def compute_depth_pyramid(self):
@@ -74,11 +82,15 @@ class DenseRGBDKeyframe(DenseKeyframe):
         self.compute_jacobian_pyramid()
         self.compute_depth_pyramid()
 
+    def cuda(self):
+        self.depth = self.depth.pin_memory().cuda(async=True)
+        super().cuda()
+
 
 class DenseStereoKeyframe(DenseKeyframe):
     """Dense Stereo keyframe"""
 
-    def __init__(self, im_left, im_right, pyrlevels=0, T_c_w=SE3.identity()):
+    def __init__(self, im_left, im_right, pyrlevels=0, T_c_w=None):
         super().__init__((im_left, im_right), im_left, pyrlevels, T_c_w)
 
     @property
@@ -112,3 +124,8 @@ class DenseStereoKeyframe(DenseKeyframe):
     def compute_pyramids(self):
         self.compute_jacobian_pyramid()
         self.compute_disparity_pyramid()
+
+    def cuda(self):
+        self.data = [d.pin_memory().cuda() for d in self.data]
+        self.disparity = self.disparity.pin_memory().cuda(async=True)
+        super().cuda()

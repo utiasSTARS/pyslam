@@ -4,7 +4,7 @@ import pykitti
 
 from liegroups import SE3
 from pyslam.pipelines import DenseStereoPipeline
-from pyslam.sensors import StereoCamera
+from pyslam.sensors import StereoCameraTorch as StereoCamera
 from pyslam.metrics import TrajectoryMetrics
 from pyslam.visualizers import TrajectoryVisualizer
 
@@ -75,8 +75,8 @@ def main():
     # 09: 2011_09_30_drive_0033 000000 001590
     # 10: 2011_09_30_drive_0034 000000 001200
 
-    basedir = '/Users/leeclement/Desktop/KITTI/raw/'
-    outdir = '/Users/leeclement/Desktop/pyslam/KITTI/'
+    basedir = '/media/m2-drive/datasets/KITTI/raw/'
+    outdir = '/home/leeclement/data/pyslam/KITTI/'
     os.makedirs(outdir, exist_ok=True)
 
     seqs = {'00': {'date': '2011_10_03',
@@ -115,9 +115,9 @@ def main():
         drive = val['drive']
         frames = val['frames']
 
-        # frames = range(0, 300)
-        # if key is not '06':
-        #     continue
+        frames = range(0, 300)
+        if key is not '06':
+            continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
         outfile = os.path.join(outdir, key + '.mat')
