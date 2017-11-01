@@ -1,4 +1,3 @@
-import copy
 import numpy as np
 import torch
 
@@ -12,6 +11,8 @@ from pyslam.residuals import PhotometricResidualSE3
 from pyslam.losses import TDistributionLoss, L2Loss, HuberLoss
 
 from pyslam.pipelines.keyframes import DenseStereoKeyframe, DenseRGBDKeyframe
+
+import time
 
 
 class DenseVOPipeline:
@@ -69,6 +70,25 @@ class DenseVOPipeline:
         # self.loss = TDistributionLoss(3.0)
         """Loss function"""
 
+        self._make_pyramid_cameras()
+
+    def _make_pyramid_cameras(self):
+        self.pyr_cameras = []
+
+        for pyrlevel in self.pyrlevel_sequence:
+            pyrfactor = 2**-pyrlevel
+
+            pyr_camera = self.camera.clone()
+            pyr_camera.fu *= pyrfactor
+            pyr_camera.fv *= pyrfactor
+            pyr_camera.cu *= pyrfactor
+            pyr_camera.cv *= pyrfactor
+            pyr_camera.h = int(np.ceil(pyr_camera.h * pyrfactor))
+            pyr_camera.w = int(np.ceil(pyr_camera.w * pyrfactor))
+            pyr_camera.compute_pixel_grid()
+
+            self.pyr_cameras.append(pyr_camera)
+
     def set_mode(self, mode):
         """Set the localization mode to ['map'|'track']"""
         self.mode = mode
@@ -85,7 +105,7 @@ class DenseVOPipeline:
         """
         if len(self.keyframes) == 0:
             # First frame, so don't track anything yet
-            trackframe.compute_pyramids(cuda=True)
+            trackframe.compute_pyramids()
             self.keyframes.append(trackframe)
             self.active_keyframe_idx = 0
             active_keyframe = self.keyframes[0]
@@ -137,15 +157,9 @@ class DenseVOPipeline:
         # params = {'T_1_0': guess}
         params = {'R_1_0': guess.rot, 't_1_0_1': guess.trans}
 
-        for pyrlevel in self.pyrlevel_sequence:
+        for (pyrlevel, pyr_camera) in zip(
+                self.pyrlevel_sequence, self.pyr_cameras):
             pyrfactor = 2**-pyrlevel
-
-            pyr_camera = copy.deepcopy(self.camera)
-            pyr_camera.fu *= pyrfactor
-            pyr_camera.fv *= pyrfactor
-            pyr_camera.cu *= pyrfactor
-            pyr_camera.cv *= pyrfactor
-            pyr_camera.h, pyr_camera.w = ref_frame.im_pyr[pyrlevel].shape
 
             im_jacobian = ref_frame.jacobian[pyrlevel]
             # ESM
@@ -203,15 +217,22 @@ class DenseStereoPipeline(DenseVOPipeline):
         self.depth_stiffness = 1 / 0.5
 
     def track(self, im_left, im_right, guess=None):
+        # start = time.perf_counter()
         if len(self.keyframes) == 0:
             # First frame, so create first keyframe with given initial pose
             trackframe = DenseStereoKeyframe(im_left, im_right, self.pyrlevels,
-                                             self.T_c_w[0])
+                                             self.T_c_w[0], cuda=True)
         else:
             # Default behaviour for second frame and beyond
-            trackframe = DenseStereoKeyframe(im_left, im_right, self.pyrlevels)
+            trackframe = DenseStereoKeyframe(
+                im_left, im_right, self.pyrlevels, cuda=True)
+        # end = time.perf_counter()
+        # print('Keyframe creation: {} s'.format(end - start))
 
+        # start = time.perf_counter()
         super().track(trackframe, guess)
+        # end = time.perf_counter()
+        # print('Motion estimation: {} s'.format(end - start))
 
 
 class DenseRGBDPipeline(DenseVOPipeline):

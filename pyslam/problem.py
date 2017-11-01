@@ -64,9 +64,10 @@ class Problem:
         self._cost_history = []
         """History of cost values at each iteration of solve."""
 
-        self._thread_pool = concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.options.num_threads)
-        """Thread pool for parallel evaluations."""
+        if self.options.num_threads > 1:
+            self._thread_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.options.num_threads)
+            """Thread pool for parallel evaluations."""
 
     def add_residual_block(self, block, param_keys, loss=L2Loss()):
         """Add a cost block to the problem."""

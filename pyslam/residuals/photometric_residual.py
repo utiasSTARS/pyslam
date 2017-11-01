@@ -13,6 +13,7 @@ class PhotometricResidualSO3:
 
     def __init__(self, camera, im_ref, im_track, im_jac,
                  intensity_stiffness, min_grad=0.):
+
         self.camera = camera
         self.im_ref = im_ref.ravel()
 
@@ -75,19 +76,11 @@ class PhotometricResidualSE3:
         self.use_cuda = im_ref.is_cuda
 
         self.camera = camera
-        self.im_ref = torch.FloatTensor(im_ref).view(-1)
-        self.im_ref.pin_memory()
+        self.uvd_ref = torch.cat([self.camera.u_grid.view(-1, 1),
+                                  self.camera.v_grid.view(-1, 1),
+                                  depth_ref.view(-1, 1)], dim=1)
 
-        u_range = range(0, self.camera.w)
-        v_range = range(0, self.camera.h)
-        u_coords, v_coords = np.meshgrid(u_range, v_range, indexing='xy')
-
-        u_coords = torch.FloatTensor(u_coords.astype(np.float)).view(-1, 1)
-        v_coords = torch.FloatTensor(v_coords.astype(np.float)).view(-1, 1)
-        d_coords = torch.FloatTensor(depth_ref).view(-1, 1)
-
-        self.uvd_ref = torch.cat(
-            [u_coords, v_coords, d_coords], dim=1).pin_memory()
+        self.im_ref = im_ref.view(-1)
 
         self.im_jac = im_jac.view(2, -1).transpose_(0, 1)
 
@@ -117,30 +110,20 @@ class PhotometricResidualSE3:
         # Precompute triangulated 3D points
         self.pt_ref, self.triang_jac = self.camera.triangulate(
             self.uvd_ref, compute_jacobians=True)
-        self.pt_ref = self.pt_ref.pin_memory()
-        self.triang_jac = self.triang_jac.pin_memory()
-
-        # Move to GPU
-        if self.use_cuda:
-            self.im_ref = self.im_ref.cuda(async=True)
-            self.im_track = self.im_track.cuda(async=True)
-            self.uvd_ref = self.uvd_ref.cuda(async=True)
-            self.im_jac = self.im_jac.cuda(async=True)
-            self.pt_ref = self.pt_ref.cuda(async=True)
-            self.triang_jac = self.triang_jac.cuda(async=True)
 
     def evaluate(self, params, compute_jacobians=None):
+
         if len(params) == 1:
             T_track_ref = SE3.from_numpy(params[0], pin_memory=True)
         elif len(params) == 2:
             T_track_ref = SE3(SO3.from_numpy(params[0], pin_memory=True),
-                              torch.Tensor(params[1]).pin_memory())
+                              torch.Tensor(params[1]))
         else:
             raise ValueError(
                 'In PhotometricResidual.evaluate() params must have length 1 or 2')
 
         if self.use_cuda:
-            T_track_ref = T_track_ref.cuda(async=True)
+            T_track_ref = T_track_ref.pin_memory().cuda(async=True)
 
         # Reproject reference image pixels into tracking image to predict the
         # reference image based on the tracking image

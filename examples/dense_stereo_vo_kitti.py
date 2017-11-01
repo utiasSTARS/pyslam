@@ -31,7 +31,7 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
     cv = dataset.calib.K_cam0[1, 2]
     b = dataset.calib.b_gray
     h, w = test_im.shape
-    camera = StereoCamera(cu, cv, fu, fv, b, w, h)
+    camera = StereoCamera(cu, cv, fu, fv, b, w, h, cuda=True)
 
     # Ground truth
     T_w_c_gt = [SE3.from_matrix(o.T_w_imu).dot(T_cam0_imu.inv())
@@ -115,7 +115,7 @@ def main():
         drive = val['drive']
         frames = val['frames']
 
-        frames = range(0, 300)
+        frames = range(0, 30)
         if key is not '06':
             continue
 
@@ -123,20 +123,20 @@ def main():
         outfile = os.path.join(outdir, key + '.mat')
         tm = run_vo_kitti(basedir, date, drive, frames, outfile)
 
-        # Compute errors
-        trans_armse, rot_armse = tm.armse()
-        print('trans armse: {} meters'.format(trans_armse))
-        print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
+        # # Compute errors
+        # trans_armse, rot_armse = tm.mean_err()
+        # print('trans armse: {} meters'.format(trans_armse))
+        # print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
 
-        # Make plots
-        visualizer = TrajectoryVisualizer({'VO': tm})
+        # # Make plots
+        # visualizer = TrajectoryVisualizer({'VO': tm})
 
-        outfile = os.path.join(outdir, key + '_err.pdf')
-        segs = list(range(100, 801, 100))
-        visualizer.plot_segment_errors(segs, outfile=outfile)
+        # outfile = os.path.join(outdir, key + '_err.pdf')
+        # segs = list(range(100, 801, 100))
+        # visualizer.plot_segment_errors(segs, outfile=outfile)
 
-        outfile = os.path.join(outdir, key + '_traj.pdf')
-        visualizer.plot_topdown(outfile=outfile)
+        # outfile = os.path.join(outdir, key + '_traj.pdf')
+        # visualizer.plot_topdown(outfile=outfile)
 
 
 # Do the thing

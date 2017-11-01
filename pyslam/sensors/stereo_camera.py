@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 class StereoCamera:
@@ -12,6 +13,17 @@ class StereoCamera:
         self.b = float(b)
         self.w = int(w)
         self.h = int(h)
+
+    def clone(self):
+        return self.__class__(self.cu, self.cv,
+                              self.fu, self.fv, self.b,
+                              self.w, self.h)
+
+    def compute_pixel_grid(self):
+        self.u_grid, self.v_grid = np.meshgrid(range(0, self.w),
+                                               range(0, self.h), indexing='xy')
+        self.u_grid = self.u_grid.astype(float)
+        self.v_grid = self.v_grid.astype(float)
 
     def _valid_mask(self, uvd):
         return (uvd[:, 2] > 0.) & (uvd[:, 2] < self.w) & \
@@ -129,6 +141,27 @@ class StereoCamera:
 
 class StereoCameraTorch(StereoCamera):
     """Torch specialization of StereoCamera."""
+
+    def __init__(self, cu, cv, fu, fv, b, w, h, cuda=False):
+        self.cuda = cuda
+        """Use CUDA?"""
+
+        super().__init__(cu, cv, fu, fv, b, w, h)
+
+    def clone(self):
+        return self.__class__(self.cu, self.cv,
+                              self.fu, self.fv, self.b,
+                              self.w, self.h,
+                              self.cuda)
+
+    def compute_pixel_grid(self):
+        super().compute_pixel_grid()
+
+        self.u_grid = torch.Tensor(self.u_grid)
+        self.v_grid = torch.Tensor(self.v_grid)
+        if self.cuda:
+            self.u_grid = self.u_grid.pin_memory().cuda(async=True)
+            self.v_grid = self.v_grid.pin_memory().cuda(async=True)
 
     def is_valid_measurement(self, uvd):
         if uvd.dim() < 2:
