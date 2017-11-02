@@ -67,6 +67,25 @@ class DenseVOPipeline:
         # self.loss = TDistributionLoss(3.0)
         """Loss function"""
 
+        self._make_pyramid_cameras()
+
+    def _make_pyramid_cameras(self):
+        self.pyr_cameras = []
+
+        for pyrlevel in self.pyrlevel_sequence:
+            pyrfactor = 2**-pyrlevel
+
+            pyr_camera = self.camera.clone()
+            pyr_camera.fu *= pyrfactor
+            pyr_camera.fv *= pyrfactor
+            pyr_camera.cu *= pyrfactor
+            pyr_camera.cv *= pyrfactor
+            pyr_camera.h = int(np.ceil(pyr_camera.h * pyrfactor))
+            pyr_camera.w = int(np.ceil(pyr_camera.w * pyrfactor))
+            pyr_camera.compute_pixel_grid()
+
+            self.pyr_cameras.append(pyr_camera)
+
     def set_mode(self, mode):
         """Set the localization mode to ['map'|'track']"""
         self.mode = mode
@@ -135,15 +154,9 @@ class DenseVOPipeline:
         # params = {'T_1_0': guess}
         params = {'R_1_0': guess.rot, 't_1_0_1': guess.trans}
 
-        for pyrlevel in self.pyrlevel_sequence:
+        for (pyrlevel, pyr_camera) in zip(
+                self.pyrlevel_sequence, self.pyr_cameras):
             pyrfactor = 2**-pyrlevel
-
-            pyr_camera = copy.deepcopy(self.camera)
-            pyr_camera.fu *= pyrfactor
-            pyr_camera.fv *= pyrfactor
-            pyr_camera.cu *= pyrfactor
-            pyr_camera.cv *= pyrfactor
-            pyr_camera.h, pyr_camera.w = ref_frame.im_pyr[pyrlevel].shape
 
             im_jacobian = ref_frame.jacobian[pyrlevel]
             # ESM

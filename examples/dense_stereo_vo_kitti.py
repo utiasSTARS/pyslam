@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import numpy as np
 
 import pykitti
@@ -39,6 +42,10 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
 
     # Pipeline
     vo = DenseStereoPipeline(camera, first_pose=T_0_w)
+    # Skip the highest resolution level
+    vo.pyrlevel_sequence.pop()
+    vo.pyr_cameras.pop()
+
     start = time.perf_counter()
     for c_idx, impair in enumerate(dataset.gray):
         vo.track(impair[0], impair[1])
@@ -75,8 +82,8 @@ def main():
     # 09: 2011_09_30_drive_0033 000000 001590
     # 10: 2011_09_30_drive_0034 000000 001200
 
-    basedir = '/Users/leeclement/Desktop/KITTI/raw/'
-    outdir = '/Users/leeclement/Desktop/pyslam/KITTI/'
+    basedir = '/media/m2-drive/datasets/KITTI/raw/'
+    outdir = '/home/leeclement/data/pyslam/KITTI/'
     os.makedirs(outdir, exist_ok=True)
 
     seqs = {'00': {'date': '2011_10_03',
@@ -115,18 +122,18 @@ def main():
         drive = val['drive']
         frames = val['frames']
 
-        # frames = range(0, 300)
-        # if key is not '06':
-        #     continue
+        # frames = range(0, 30)
+        # if key is not '05':
+        # continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
         outfile = os.path.join(outdir, key + '.mat')
         tm = run_vo_kitti(basedir, date, drive, frames, outfile)
 
         # Compute errors
-        trans_armse, rot_armse = tm.armse()
-        print('trans armse: {} meters'.format(trans_armse))
-        print('rot armse: {} deg'.format(rot_armse * 180. / np.pi))
+        trans_mean_err, rot_mean_err = tm.mean_err()
+        print('trans mean err: {} meters'.format(trans_mean_err))
+        print('rot mean err: {} deg'.format(rot_mean_err * 180. / np.pi))
 
         # Make plots
         visualizer = TrajectoryVisualizer({'VO': tm})
@@ -136,7 +143,7 @@ def main():
         visualizer.plot_segment_errors(segs, outfile=outfile)
 
         outfile = os.path.join(outdir, key + '_traj.pdf')
-        visualizer.plot_topdown(outfile=outfile)
+        visualizer.plot_topdown(which_plane='xy', outfile=outfile)
 
 
 # Do the thing

@@ -15,10 +15,17 @@ class StereoCamera:
         self.b = float(b)
         self.w = int(w)
         self.h = int(h)
-        self.K = np.array([[self.fu, 0., self.cu],
-                           [0., self.fv, self.cv],
-                           [0., 0., 1.]])
-        self.invK = np.linalg.inv(self.K)
+
+    def clone(self):
+        return self.__class__(self.cu, self.cv,
+                              self.fu, self.fv, self.b,
+                              self.w, self.h)
+
+    def compute_pixel_grid(self):
+        self.u_grid, self.v_grid = np.meshgrid(range(0, self.w),
+                                               range(0, self.h), indexing='xy')
+        self.u_grid = self.u_grid.astype(float)
+        self.v_grid = self.v_grid.astype(float)
 
     def is_valid_measurement(self, uvd):
         """Check if one or more uvd measurements is valid.

@@ -11,21 +11,6 @@ from numba import guvectorize, float32, float64
 SE3_ODOT_SHAPE = np.empty(6)
 
 
-@guvectorize([(float32[:], float32[:, :]),
-              (float64[:], float64[:, :])],
-             '(n)->(n,n)', nopython=True, cache=True, target='parallel')
-def fast_neg_so3_wedge(vec, out):
-    out[0, 0] = 0.
-    out[0, 1] = vec[2]
-    out[0, 2] = -vec[1]
-    out[1, 0] = -vec[2]
-    out[1, 1] = 0.
-    out[1, 2] = vec[0]
-    out[2, 0] = vec[1]
-    out[2, 1] = -vec[0]
-    out[2, 2] = 0.
-
-
 @guvectorize([(float32[:], float32[:], float32[:, :]),
               (float64[:], float64[:], float64[:, :])],
              '(n),(m)->(n,m)', nopython=True, cache=True, target='parallel')
@@ -50,64 +35,6 @@ def fast_se3_odot(vec, junk, out):
     out[2, 5] = 0.
 
 
-class PhotometricResidualSO3:
-    """SO3 (homography) photometric residual for greyscale images.
-    Uses the pre-computed reference image jacobian as an approximation to the
-    tracking image jacobian under the assumption that the camera motion is small."""
-
-    def __init__(self, camera, im_ref, im_track, im_jac,
-                 intensity_stiffness, min_grad=0.):
-        self.camera = camera
-        self.im_ref = im_ref.ravel()
-
-        u_range = range(0, self.camera.w)
-        v_range = range(0, self.camera.h)
-        u_coords, v_coords = np.meshgrid(u_range, v_range, indexing='xy')
-        self.uv_ref = np.vstack([u_coords.ravel(),
-                                 v_coords.ravel(),
-                                 np.ones(u_coords.size)]).T
-        self.im_jac = np.vstack([im_jac[0].ravel(),
-                                 im_jac[1].ravel(),
-                                 np.zeros(im_jac[0].size)]).T
-
-        self.im_track = im_track
-        self.intensity_stiffness = intensity_stiffness
-        self.min_grad = min_grad
-
-        # Filter out pixels with weak gradients
-        grad_ref = np.linalg.norm(self.im_jac, axis=1)
-        strong_pixels = grad_ref >= self.min_grad
-        self.uv_ref = self.uv_ref.compress(strong_pixels, axis=0)
-        self.im_ref = self.im_ref.compress(strong_pixels)
-        self.im_jac = self.im_jac.compress(strong_pixels, axis=0)
-
-        # Precompute reference points
-        self.pt_ref = self.camera.invK.dot(self.uv_ref.T).T
-
-    def evaluate(self, params, compute_jacobians=None):
-        R_track_ref = params[0]
-        pt_track = R_track_ref.dot(self.pt_ref)
-        uv_track = self.camera.K.dot(pt_track.T).T
-
-        im_ref_est = bilinear_interpolate(self.im_track,
-                                          uv_track[:, 0],
-                                          uv_track[:, 1])
-
-        residual = self.intensity_stiffness * (im_ref_est - self.im_ref)
-
-        if compute_jacobians:
-            jacobians = [None]
-
-            if compute_jacobians[0]:
-                temp = stackmul(self.camera.K, fast_neg_so3_wedge(pt_track))
-                jacobians[0] = self.intensity_stiffness * \
-                    np.squeeze(stackmul(self.im_jac[:, np.newaxis, :], temp))
-
-            return residual, jacobians
-
-        return residual
-
-
 class PhotometricResidualSE3:
     """Full SE3 photometric residual for greyscale images.
     Uses the pre-computed reference image jacobian as an approximation to the
@@ -119,11 +46,8 @@ class PhotometricResidualSE3:
         self.camera = camera
         self.im_ref = im_ref.ravel()
 
-        u_range = range(0, self.camera.w)
-        v_range = range(0, self.camera.h)
-        u_coords, v_coords = np.meshgrid(u_range, v_range, indexing='xy')
-        self.uvd_ref = np.vstack([u_coords.ravel(),
-                                  v_coords.ravel(),
+        self.uvd_ref = np.vstack([self.camera.u_grid.ravel(),
+                                  self.camera.v_grid.ravel(),
                                   depth_ref.ravel()]).T
         self.im_jac = np.vstack([im_jac[0].ravel(),
                                  im_jac[1].ravel()]).T
@@ -187,8 +111,9 @@ class PhotometricResidualSE3:
         im_proj_jac = stackmul(self.im_jac[:, np.newaxis, :],
                                project_jac[:, 0:2, :])  # Nx1x3
         temp = stackmul(im_proj_jac, T_track_ref.rot.as_matrix())  # Nx1x3
-        im_depth_jac = np.squeeze(stackmul(temp, self.triang_jac[:, :, 2:3])).compress(
-            valid_pixels, axis=0)  # Nx1x1
+        im_depth_jac = np.squeeze(
+            stackmul(temp, self.triang_jac[:, :, 2:3])).compress(
+                valid_pixels, axis=0)  # Nx1x1
 
         # Compute the overall stiffness
         # \sigma^2 = \sigma^2_I + J_d \sigma^2_d J_d^T
@@ -208,7 +133,8 @@ class PhotometricResidualSE3:
                 # This is actually faster than filtering the intermediate
                 # results!
                 odot_pt_track = fast_se3_odot(pt_track, SE3_ODOT_SHAPE)
-                jac = np.squeeze(stackmul(im_proj_jac, odot_pt_track)).compress(
+                jac = np.squeeze(
+                    stackmul(im_proj_jac, odot_pt_track)).compress(
                     valid_pixels, axis=0)
                 jac = (stiffness * jac.T).T
 
