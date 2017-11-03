@@ -17,7 +17,7 @@ class RGBDCamera:
 
     def clone(self):
         return self.__class__(self.cu, self.cv,
-                              self.fu, self.fv, self.b,
+                              self.fu, self.fv,
                               self.w, self.h)
 
     def compute_pixel_grid(self):
