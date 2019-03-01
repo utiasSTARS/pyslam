@@ -53,8 +53,8 @@ class SparseVOPipeline:
         self.ransac = FrameToFrameRANSAC(self.camera)
         """RANSAC outlier rejection"""
 
-        self.reprojection_stiffness = 1.
-        """Reprojection error stiffness"""
+        self.reprojection_stiffness = np.diag([1., 1., 1.])
+        """Reprojection error stiffness matrix"""
         self.mode = 'map'
         """Create new keyframes or localize against existing ones? ['map'|'track']"""
 
@@ -133,15 +133,17 @@ class SparseStereoPipeline(SparseVOPipeline):
         self.matcher.pushBack(track_frame.im_left, track_frame.im_right)
         self.matcher.matchFeatures(self.matcher_mode)
         matches = self.matcher.getMatches()
-        print('libviso2 matched {} features.'.format(matches.size()))
+        # print('libviso2 matched {} features.'.format(matches.size()))
 
         # Stereo observations (uvd)
         self.obs_0 = [np.array([m.u1p, m.v1p, m.u1p - m.u2p]) for m in matches]
         self.obs_1 = [np.array([m.u1c, m.v1c, m.u1c - m.u2c]) for m in matches]
 
-        # Prune all observations with disparity close to 0
-        self._prune_obs()
-        print('Matches after pruning: {} '.format(len(self.obs_0)))
+        # Prune all observations with disparity <= 0
+        keep_mask = (self.obs_0[:, 2] > 0) & (self.obs_1[:, 2] > 0)
+        self.obs_0 = self.obs_0[keep_mask, :]
+        self.obs_1 = self.obs_1[keep_mask, :]
+        # print('Matches after pruning: {} '.format(len(self.obs_0)))
 
         # RANSAC
         self.ransac.set_obs(self.obs_0, self.obs_1)
@@ -159,15 +161,6 @@ class SparseStereoPipeline(SparseVOPipeline):
         params = problem.solve()
 
         return params['T_1_0']
-
-    def _prune_obs(self):
-        """Ensure that disparity is not 0"""
-        del_indices = [i for i in range(
-            len(self.obs_0)) if self.obs_1[i][2] < 0.01 or self.obs_1[i][2] < 0.01]
-
-        for i in sorted(del_indices, reverse=True):
-            self.obs_0.pop(i)
-            self.obs_1.pop(i)
 
 
 class SparseRGBDPipeline(SparseVOPipeline):
@@ -193,17 +186,19 @@ class SparseRGBDPipeline(SparseVOPipeline):
         self.matcher.pushBack(track_frame.image)
         self.matcher.matchFeatures(self.matcher_mode)
         matches = self.matcher.getMatches()
-        print('libviso2 matched {} features.'.format(matches.size()))
+        # print('libviso2 matched {} features.'.format(matches.size()))
 
         # RGB-D observations (uvz)
-        self.obs_0 = [
-            np.array([m.u1p, m.v1p, ref_frame.depth[m.u1p, m.v1p]]) for m in matches]
-        self.obs_1 = [
-            np.array([m.u1c, m.v1c, ref_frame.depth[m.u1c, m.v1c]]) for m in matches]
+        self.obs_0 = np.array(
+            [[m.u1p, m.v1p, ref_frame.depth[int(m.v1p), int(m.u1p)]] for m in matches])
+        self.obs_1 = np.array(
+            [[m.u1c, m.v1c, track_frame.depth[int(m.v1c), int(m.u1c)]] for m in matches])
 
         # Prune all observations with depth <= 0
-        self._prune_obs()
-        print('Matches after pruning: {} '.format(len(self.obs_0)))
+        keep_mask = (self.obs_0[:, 2] > 0) & (self.obs_1[:, 2] > 0)
+        self.obs_0 = self.obs_0[keep_mask, :]
+        self.obs_1 = self.obs_1[keep_mask, :]
+        # print('Matches after pruning: {} '.format(self.obs_0.shape[0]))
 
         # RANSAC
         self.ransac.set_obs(self.obs_0, self.obs_1)
@@ -221,12 +216,3 @@ class SparseRGBDPipeline(SparseVOPipeline):
         params = problem.solve()
 
         return params['T_1_0']
-
-    def _prune_obs(self):
-        """Ensure that depth >= 0"""
-        del_indices = [i for i in range(
-            len(self.obs_0)) if self.obs_1[i][2] < 0.01 or self.obs_1[i][2] < 0.01]
-
-        for i in sorted(del_indices, reverse=True):
-            self.obs_0.pop(i)
-            self.obs_1.pop(i)

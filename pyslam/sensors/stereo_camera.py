@@ -79,12 +79,12 @@ class StereoCamera:
         return np.squeeze(pt_c)
 
     def __repr__(self):
-        return "{}:\n cu: {:f}\n cv: {:f}\n fu: {:f}\n fv: {:f}\n" \
-               "  b: {:f}\n  w: {:d}\n  h: {:d}\n".format(self.__class__.__name__,
-                                                          self.cu, self.cv,
-                                                          self.fu, self.fv,
-                                                          self.b,
-                                                          self.w, self.h)
+        return ("{}:\n cu: {:f}\n cv: {:f}\n fu: {:f}\n fv: {:f}\n"
+                + "  b: {:f}\n  w: {:d}\n  h: {:d}\n").format(self.__class__.__name__,
+                                                              self.cu, self.cv,
+                                                              self.fu, self.fv,
+                                                              self.b,
+                                                              self.w, self.h)
 
 
 @guvectorize([(float32[:], float32[:], boolean[:]),
