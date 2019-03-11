@@ -112,3 +112,33 @@ class DenseStereoKeyframe(DenseKeyframe):
     def compute_pyramids(self):
         self.compute_jacobian_pyramid()
         self.compute_disparity_pyramid()
+
+
+class SparseStereoKeyframe(Keyframe):
+    """Sparse Stereo keyframe"""
+
+    def __init__(self, im_left, im_right, T_c_w=SE3.identity()):
+        super().__init__((im_left, im_right), T_c_w)
+
+    @property
+    def im_left(self):
+        return self.data[0]
+
+    @property
+    def im_right(self):
+        return self.data[1]
+
+
+class SparseRGBDKeyframe(Keyframe):
+    """Sparse RGB-D keyframe"""
+
+    def __init__(self, image, depth,  T_c_w=SE3.identity()):
+        super().__init__((image, depth), T_c_w)
+
+    @property
+    def image(self):
+        return self.data[0]
+
+    @property
+    def depth(self):
+        return self.data[1]
