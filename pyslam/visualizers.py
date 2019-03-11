@@ -31,7 +31,9 @@ class TrajectoryVisualizer:
         plot_params['use_endpoint_markers'] = kwargs.get(
             'use_endpoint_markers', False)
         plot_params['fontsize'] = kwargs.get('fontsize', 10)
+        plot_params['legend_fontsize'] = kwargs.get('legend_fontsize', plot_params['fontsize'])
         plot_params['err_xlabel'] = kwargs.get('err_xlabel', 'Timestep')
+        plot_params['line_colours'] = kwargs.get('line_colours', ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown'])
 
         for key in plot_params.keys():
             try:
@@ -74,7 +76,7 @@ class TrajectoryVisualizer:
 
         plotted_gt = False
 
-        for label, tm in self.tm_dict.items():
+        for p_i, (label, tm) in enumerate(self.tm_dict.items()):
             pos_gt = np.array([T.trans for T in tm.Twv_gt])
             pos_est = np.array([T.trans for T in tm.Twv_est])
 
@@ -96,21 +98,21 @@ class TrajectoryVisualizer:
 
             if plot_params['use_endpoint_markers']:
                 ax.plot(pos_est[:, x_dim], pos_est[:, y_dim],
-                        linewidth=plot_params['est_linewidth'],
+                        linewidth=plot_params['est_linewidth'], color=plot_params['line_colours'][p_i],
                         marker=next(endpoint_markers_iter), markevery=[pos_est.shape[0] - 1],
                         label=label)
             else:
-                ax.plot(pos_est[:, x_dim], pos_est[:, y_dim],
+                ax.plot(pos_est[:, x_dim], pos_est[:, y_dim], color=plot_params['line_colours'][p_i],
                         linewidth=plot_params['est_linewidth'], label=label)
 
         ax.axis('equal')
-        ax.minorticks_on()
+        #ax.minorticks_on()
         ax.grid(which='both', linestyle=':',
                 linewidth=plot_params['grid_linewidth'])
         ax.set_title('Trajectory', fontsize=plot_params['fontsize'])
         ax.set_xlabel('Easting (m)', fontsize=plot_params['fontsize'])
         ax.set_ylabel('Northing (m)', fontsize=plot_params['fontsize'])
-        ax.legend(fontsize=plot_params['fontsize'])
+        ax.legend(fontsize=plot_params['legend_fontsize'])
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
@@ -136,13 +138,13 @@ class TrajectoryVisualizer:
 
         fig, ax = plt.subplots(1, 2, **kwargs)
 
-        for label, tm in self.tm_dict.items():
+        for p_i, (label, tm) in enumerate(self.tm_dict.items()):
             segerr, avg_segerr = tm.segment_errors(segs)
 
             ax[0].plot(avg_segerr[:, 0], avg_segerr[:, 1]
-                       * 100., '-s', label=label)
+                       * 100., '-s', color=plot_params['line_colours'][p_i], label=label)
             ax[1].plot(avg_segerr[:, 0], avg_segerr[:, 2]
-                       * 180. / np.pi, '-s', label=label)
+                       * 180. / np.pi, '-s', color=plot_params['line_colours'][p_i], label=label)
 
         ax[0].minorticks_on()
         ax[0].grid(which='both', linestyle=':',
@@ -162,7 +164,7 @@ class TrajectoryVisualizer:
                          fontsize=plot_params['fontsize'])
         ax[1].set_ylabel('Average error (deg/m)',
                          fontsize=plot_params['fontsize'])
-        ax[1].legend(fontsize=plot_params['fontsize'])
+        ax[1].legend(fontsize=plot_params['legend_fontsize'])
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
@@ -184,9 +186,10 @@ class TrajectoryVisualizer:
 
         # Use a sane default figsize if the user doesn't specify one
         figsize = kwargs.get('figsize', (8, 3))
+        kwargs.update({'figsize': figsize})
         fig, ax = plt.subplots(1, 2, **kwargs)
 
-        for label, tm in self.tm_dict.items():
+        for p_i, (label, tm) in enumerate(self.tm_dict.items()):
             if segment_range is None:
                 this_segment_range = range(len(tm.Twv_gt))
 
@@ -200,8 +203,8 @@ class TrajectoryVisualizer:
                 raise ValueError(
                     'Got invalid err_type \'{}\''.format(err_type))
 
-            ax[0].plot(trans_err, '-', label=label)
-            ax[1].plot(rot_err * 180. / np.pi, '-', label=label)
+            ax[0].plot(trans_err, '-', color=plot_params['line_colours'][p_i], label=label)
+            ax[1].plot(rot_err * 180. / np.pi, '-', color=plot_params['line_colours'][p_i], label=label)
 
         ax[0].minorticks_on()
         ax[0].grid(which='both', linestyle=':',
@@ -224,7 +227,7 @@ class TrajectoryVisualizer:
                          fontsize=plot_params['fontsize'])
         ax[1].set_ylabel('{} (deg)'.format(err_name),
                          fontsize=plot_params['fontsize'])
-        ax[1].legend(fontsize=plot_params['fontsize'])
+        ax[1].legend(fontsize=plot_params['legend_fontsize'])
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))

@@ -21,7 +21,7 @@ class PoseToPoseResidual:
             jacobians = [None for _ in enumerate(params)]
 
             if compute_jacobians[0]:
-                jacobians[0] = np.dot(self.stiffness, -T_2_0_est.adjoint())
+                jacobians[0] = np.dot(self.stiffness, -T_2_0_est.dot(T_1_0_est.inv()).adjoint())
 
             if compute_jacobians[1]:
                 jacobians[1] = np.dot(
