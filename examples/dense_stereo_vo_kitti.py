@@ -1,3 +1,4 @@
+  
 import matplotlib
 matplotlib.use('Agg')
 
@@ -19,7 +20,7 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
     # Load KITTI data
     dataset = pykitti.raw(basedir, date, drive, frames=frames, imformat='cv2')
 
-    first_oxts = next(dataset.oxts)
+    first_oxts = dataset.oxts[0]
     T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)
     T_cam0_imu.normalize()
     T_0_w = T_cam0_imu.dot(
@@ -27,7 +28,7 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
     T_0_w.normalize()
 
     # Create the camera
-    test_im = next(dataset.cam0)
+    test_im = np.array(next(dataset.cam0))
     fu = dataset.calib.K_cam0[0, 0]
     fv = dataset.calib.K_cam0[1, 1]
     cu = dataset.calib.K_cam0[0, 2]
@@ -48,7 +49,7 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
 
     start = time.perf_counter()
     for c_idx, impair in enumerate(dataset.gray):
-        vo.track(impair[0], impair[1])
+        vo.track(np.array(impair[0]), np.array(impair[1]))
         # vo.track(impair[0], impair[1], guess=T_w_c_gt[c_idx].inv())
         end = time.perf_counter()
         print('Image {}/{} | {:.3f} s'.format(c_idx, len(dataset), end - start))
@@ -82,11 +83,12 @@ def main():
     # 09: 2011_09_30_drive_0033 000000 001590
     # 10: 2011_09_30_drive_0034 000000 001200
 
-    basedir = '/media/m2-drive/datasets/KITTI/raw/'
-    outdir = '/home/leeclement/data/pyslam/KITTI/'
+    basedir = '/path/to/KITTI/raw/'
+    outdir = '/path_to/output/'
     os.makedirs(outdir, exist_ok=True)
 
-    seqs = {'00': {'date': '2011_10_03',
+    seqs = {
+            '00': {'date': '2011_10_03',
                    'drive': '0027',
                    'frames': range(0, 4541)},
             '01': {'date': '2011_10_03',
@@ -115,7 +117,8 @@ def main():
                    'frames': range(0, 1591)},
             '10': {'date': '2011_09_30',
                    'drive': '0034',
-                   'frames': range(0, 1201)}}
+                   'frames': range(0, 1201)}
+}
 
     for key, val in seqs.items():
         date = val['date']

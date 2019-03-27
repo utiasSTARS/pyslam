@@ -7,31 +7,26 @@ import pykitti
 from liegroups import SE3
 from pyslam.problem import Options, Problem
 from pyslam.sensors import StereoCamera
-from pyslam.residuals import PhotometricResidual
+from pyslam.residuals import PhotometricResidualSE3
 from pyslam.losses import HuberLoss
 import time
 
 # Load KITTI data
-basedir = '/Users/leeclement/Desktop/KITTI/raw/'
+basedir = '/path/to/KITTI/raw/'
 date = '2011_09_30'
-drive = '0018'
-frame_range = [0, 1]
+drive = '0016'
+frame_range = range(0,2)
 
-dataset = pykitti.raw(basedir, date, drive, frame_range)
-dataset.load_calib()
-dataset.load_gray(format='cv2')
-dataset.load_oxts()
+dataset = pykitti.raw(basedir, date, drive, frames=frame_range)
 
 # Parameters to estimate
 T_cam0_imu = SE3.from_matrix(dataset.calib.T_cam0_imu)
 T_cam0_imu.normalize()
-T_0_w = T_cam0_imu * \
-    SE3.from_matrix(dataset.oxts[0].T_w_imu).inv()
+T_0_w = T_cam0_imu.dot(SE3.from_matrix(dataset.oxts[0].T_w_imu).inv())
 T_0_w.normalize()
-T_1_w = T_cam0_imu * \
-    SE3.from_matrix(dataset.oxts[1].T_w_imu).inv()
+T_1_w = T_cam0_imu.dot(SE3.from_matrix(dataset.oxts[1].T_w_imu).inv())
 T_1_w.normalize()
-T_1_0_true = T_1_w * T_0_w.inv()
+T_1_0_true = T_1_w.dot(T_0_w.inv())
 
 # params_init = {'T_1_0': T_1_0_true}
 params_init = {'T_1_0': SE3.identity()}
@@ -67,9 +62,9 @@ for pyrlevel in pyrlevels:
     #     numDisparities=max_disp - min_disp, blockSize=window_size)
 
     impairs = []
-    for ims in dataset.gray:
-        imL = ims.left
-        imR = ims.right
+    for imL, imR in dataset.gray:
+        imL = np.array(imL)
+        imR = np.array(imR)
         for _ in range(pyrlevel):
             imL = cv2.pyrDown(imL)
             imR = cv2.pyrDown(imR)
@@ -103,14 +98,13 @@ for pyrlevel in pyrlevels:
     w = impairs[0][0].shape[1]
     h = impairs[0][0].shape[0]
     camera = StereoCamera(cu, cv, fu, fv, b, w, h)
-
+    camera.compute_pixel_grid()
     # Create the cost function
-    im_ref = impairs[0][0].astype(float) / 255.
+    im_ref = impairs[0][0].astype(float) / 255. #left image of first frame
     disp_ref = disp[0]
-    im_track = impairs[1][0].astype(float) / 255.
+    im_track = impairs[1][0].astype(float) / 255. #left image of second frame
     jac_ref = im_jac[0]
-    residual = PhotometricResidual(
-        camera, im_ref, disp_ref, jac_ref, im_track, 1.)
+    residual = PhotometricResidualSE3(camera, im_ref, disp_ref, im_track, jac_ref,  1., 1.)
 
     # Timing debug
     # niters = 100
@@ -138,4 +132,4 @@ for pyrlevel in pyrlevels:
     # print('Elapsed time: {} s'.format(end - start))
 
 print('Error in T_1_w: {}'.format(
-    SE3.log(T_1_w * (params['T_1_0'] * T_0_w).inv())))
+    SE3.log(T_1_w.dot((params['T_1_0'].dot(T_0_w)).inv()))))
