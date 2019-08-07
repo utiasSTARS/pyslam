@@ -7,6 +7,7 @@ setup(
     author='Lee Clement',
     author_email='lee.clement@robotics.utias.utoronto.ca',
     license='MIT',
-    packages=['pyslam'],
+    packages=['pyslam', 'pyslam.pipelines',
+              'pyslam.residuals', 'pyslam.sensors'],
     install_requires=['numpy', 'scipy', 'numba', 'liegroups']
 )
