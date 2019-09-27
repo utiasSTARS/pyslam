@@ -1,19 +1,15 @@
-  
+
+import os
+import time
+from pyslam.visualizers import TrajectoryVisualizer
+from pyslam.metrics import TrajectoryMetrics
+from pyslam.sensors import StereoCamera
+from pyslam.pipelines import DenseStereoPipeline
+from liegroups import SE3
+import pykitti
+import numpy as np
 import matplotlib
 matplotlib.use('Agg')
-
-import numpy as np
-
-import pykitti
-
-from liegroups import SE3
-from pyslam.pipelines import DenseStereoPipeline
-from pyslam.sensors import StereoCamera
-from pyslam.metrics import TrajectoryMetrics
-from pyslam.visualizers import TrajectoryVisualizer
-
-import time
-import os
 
 
 def run_vo_kitti(basedir, date, drive, frames, outfile=None):
@@ -64,6 +60,9 @@ def run_vo_kitti(basedir, date, drive, frames, outfile=None):
         print('Saving to {}'.format(outfile))
         tm.savemat(outfile)
 
+    # Clean up
+    del vo
+
     return tm
 
 
@@ -88,46 +87,42 @@ def main():
     os.makedirs(outdir, exist_ok=True)
 
     seqs = {
-            '00': {'date': '2011_10_03',
-                   'drive': '0027',
-                   'frames': range(0, 4541)},
-            '01': {'date': '2011_10_03',
-                   'drive': '0042',
-                   'frames': range(0, 1101)},
-            '02': {'date': '2011_10_03',
-                   'drive': '0034',
-                   'frames': range(0, 4661)},
-            '04': {'date': '2011_09_30',
-                   'drive': '0016',
-                   'frames': range(0, 271)},
-            '05': {'date': '2011_09_30',
-                   'drive': '0018',
-                   'frames': range(0, 2761)},
-            '06': {'date': '2011_09_30',
-                   'drive': '0020',
-                   'frames': range(0, 1101)},
-            '07': {'date': '2011_09_30',
-                   'drive': '0027',
-                   'frames': range(0, 1101)},
-            '08': {'date': '2011_09_30',
-                   'drive': '0028',
-                   'frames': range(1100, 5171)},
-            '09': {'date': '2011_09_30',
-                   'drive': '0033',
-                   'frames': range(0, 1591)},
-            '10': {'date': '2011_09_30',
-                   'drive': '0034',
-                   'frames': range(0, 1201)}
-}
+        '00': {'date': '2011_10_03',
+               'drive': '0027',
+               'frames': range(0, 4541)},
+        '01': {'date': '2011_10_03',
+               'drive': '0042',
+               'frames': range(0, 1101)},
+        '02': {'date': '2011_10_03',
+               'drive': '0034',
+               'frames': range(0, 4661)},
+        '04': {'date': '2011_09_30',
+               'drive': '0016',
+               'frames': range(0, 271)},
+        '05': {'date': '2011_09_30',
+               'drive': '0018',
+               'frames': range(0, 2761)},
+        '06': {'date': '2011_09_30',
+               'drive': '0020',
+               'frames': range(0, 1101)},
+        '07': {'date': '2011_09_30',
+               'drive': '0027',
+               'frames': range(0, 1101)},
+        '08': {'date': '2011_09_30',
+               'drive': '0028',
+               'frames': range(1100, 5171)},
+        '09': {'date': '2011_09_30',
+               'drive': '0033',
+               'frames': range(0, 1591)},
+        '10': {'date': '2011_09_30',
+               'drive': '0034',
+               'frames': range(0, 1201)}
+    }
 
     for key, val in seqs.items():
         date = val['date']
         drive = val['drive']
         frames = val['frames']
-
-        # frames = range(0, 30)
-        # if key is not '05':
-        # continue
 
         print('Odometry sequence {} | {} {}'.format(key, date, drive))
         outfile = os.path.join(outdir, key + '.mat')
@@ -147,6 +142,9 @@ def main():
 
         outfile = os.path.join(outdir, key + '_traj.pdf')
         visualizer.plot_topdown(which_plane='xy', outfile=outfile)
+
+        # Clean up
+        del visualizer, tm
 
 
 # Do the thing

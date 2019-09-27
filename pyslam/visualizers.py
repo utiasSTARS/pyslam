@@ -1,12 +1,12 @@
+from pyslam.metrics import TrajectoryMetrics
+from matplotlib import rc
+import matplotlib.pyplot as plt
 import numpy as np
 
 import matplotlib
 # Removes the XWindows backend (useful for producing plots via tmux without -X)
 matplotlib.use('Agg', warn=False)
-import matplotlib.pyplot as plt
-from matplotlib import rc
 
-from pyslam.metrics import TrajectoryMetrics
 
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
@@ -31,9 +31,11 @@ class TrajectoryVisualizer:
         plot_params['use_endpoint_markers'] = kwargs.get(
             'use_endpoint_markers', False)
         plot_params['fontsize'] = kwargs.get('fontsize', 10)
-        plot_params['legend_fontsize'] = kwargs.get('legend_fontsize', plot_params['fontsize'])
+        plot_params['legend_fontsize'] = kwargs.get(
+            'legend_fontsize', plot_params['fontsize'])
         plot_params['err_xlabel'] = kwargs.get('err_xlabel', 'Timestep')
-        plot_params['line_colours'] = kwargs.get('line_colours', ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown'])
+        plot_params['line_colours'] = kwargs.get('line_colours', [
+                                                 'tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown'])
 
         for key in plot_params.keys():
             try:
@@ -106,7 +108,7 @@ class TrajectoryVisualizer:
                         linewidth=plot_params['est_linewidth'], label=label)
 
         ax.axis('equal')
-        #ax.minorticks_on()
+        # ax.minorticks_on()
         ax.grid(which='both', linestyle=':',
                 linewidth=plot_params['grid_linewidth'])
         ax.set_title('Trajectory', fontsize=plot_params['fontsize'])
@@ -116,7 +118,7 @@ class TrajectoryVisualizer:
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
-            fig.savefig(outfile)
+            fig.savefig(outfile, bbox_inches='tight', transparent=True)
 
         return fig, ax
 
@@ -137,14 +139,19 @@ class TrajectoryVisualizer:
         kwargs.update({'figsize': figsize})
 
         fig, ax = plt.subplots(1, 2, **kwargs)
+        handles = []
+        legend = []
 
         for p_i, (label, tm) in enumerate(self.tm_dict.items()):
             segerr, avg_segerr = tm.segment_errors(segs)
 
-            ax[0].plot(avg_segerr[:, 0], avg_segerr[:, 1]
-                       * 100., '-s', color=plot_params['line_colours'][p_i], label=label)
+            h = ax[0].plot(avg_segerr[:, 0], avg_segerr[:, 1]
+                           * 100., '-s', color=plot_params['line_colours'][p_i], label=label)
             ax[1].plot(avg_segerr[:, 0], avg_segerr[:, 2]
                        * 180. / np.pi, '-s', color=plot_params['line_colours'][p_i], label=label)
+
+            handles.append(h[0])
+            legend.append(label)
 
         ax[0].minorticks_on()
         ax[0].grid(which='both', linestyle=':',
@@ -153,22 +160,26 @@ class TrajectoryVisualizer:
                         fontsize=plot_params['fontsize'])
         ax[0].set_xlabel('Segment length (m)',
                          fontsize=plot_params['fontsize'])
-        ax[0].set_ylabel('Average error (\%)',
+        ax[0].set_ylabel('Avg. err. (\%)',
                          fontsize=plot_params['fontsize'])
 
         ax[1].minorticks_on()
         ax[1].grid(which='both', linestyle=':',
                    linewidth=plot_params['grid_linewidth'])
-        ax[1].set_title('Rotational error', fontsize=plot_params['fontsize'])
+        ax[1].set_title('Rotational error',
+                        fontsize=plot_params['fontsize'])
         ax[1].set_xlabel('Segment length (m)',
                          fontsize=plot_params['fontsize'])
-        ax[1].set_ylabel('Average error (deg/m)',
+        ax[1].set_ylabel('Avg. err. (deg/m)',
                          fontsize=plot_params['fontsize'])
-        ax[1].legend(fontsize=plot_params['legend_fontsize'])
+
+        fig.legend(handles, legend, loc='lower center', ncol=len(self.tm_dict),
+                   fontsize=plot_params['legend_fontsize'])
+        fig.subplots_adjust(wspace=0.3, bottom=0.35)
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
-            fig.savefig(outfile)
+            fig.savefig(outfile, bbox_inches='tight', transparent=True)
 
         return fig, ax
 
@@ -188,6 +199,8 @@ class TrajectoryVisualizer:
         figsize = kwargs.get('figsize', (8, 3))
         kwargs.update({'figsize': figsize})
         fig, ax = plt.subplots(1, 2, **kwargs)
+        handles = []
+        legend = []
 
         for p_i, (label, tm) in enumerate(self.tm_dict.items()):
             if segment_range is None:
@@ -203,8 +216,13 @@ class TrajectoryVisualizer:
                 raise ValueError(
                     'Got invalid err_type \'{}\''.format(err_type))
 
-            ax[0].plot(trans_err, '-', color=plot_params['line_colours'][p_i], label=label)
-            ax[1].plot(rot_err * 180. / np.pi, '-', color=plot_params['line_colours'][p_i], label=label)
+            h = ax[0].plot(trans_err, '-',
+                           color=plot_params['line_colours'][p_i], label=label)
+            ax[1].plot(rot_err * 180. / np.pi, '-',
+                       color=plot_params['line_colours'][p_i], label=label)
+
+            handles.append(h[0])
+            legend.append(label)
 
         ax[0].minorticks_on()
         ax[0].grid(which='both', linestyle=':',
@@ -227,11 +245,14 @@ class TrajectoryVisualizer:
                          fontsize=plot_params['fontsize'])
         ax[1].set_ylabel('{} (deg)'.format(err_name),
                          fontsize=plot_params['fontsize'])
-        ax[1].legend(fontsize=plot_params['legend_fontsize'])
+
+        fig.legend(handles, legend, loc='lower center', ncol=len(self.tm_dict),
+                   fontsize=plot_params['legend_fontsize'])
+        fig.subplots_adjust(wspace=0.3, bottom=0.35)
 
         if outfile is not None:
             print('Saving to {}'.format(outfile))
-            fig.savefig(outfile)
+            fig.savefig(outfile, bbox_inches='tight', transparent=True)
 
         return fig, ax
 
